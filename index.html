@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Artemis II — Orion Live Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Barlow:wght@300;400;500;600&family=Barlow+Condensed:wght@400;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<noscript><link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Barlow:wght@300;400;500;600&family=Barlow+Condensed:wght@400;600;700&display=swap" rel="stylesheet"></noscript>
+<style>
+:root {
+  --bg: #060a12;
+  --bg2: #0c1220;
+  --bg3: #121b2e;
+  --surface: rgba(255,255,255,0.04);
+  --surface2: rgba(255,255,255,0.07);
+  --border: rgba(255,255,255,0.08);
+  --border2: rgba(255,255,255,0.14);
+  --accent: #4da8ff;
+  --accent2: #00e5c0;
+  --gold: #f5a623;
+  --red: #ff4d4d;
+  --text: #e8eef8;
+  --muted: #6a7a94;
+  --dim: #3a4a60;
+  --mono: 'Space Mono', 'Courier New', monospace;
+  --sans: 'Barlow', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+  --cond: 'Barlow Condensed', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+}
+*,*::before,*::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { background: var(--bg); }
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+  padding-bottom: env(safe-area-inset-bottom, 20px);
+}
+
+/* stars bg */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    radial-gradient(1px 1px at 15% 20%, rgba(255,255,255,0.6) 0%, transparent 100%),
+    radial-gradient(1px 1px at 55% 8%, rgba(255,255,255,0.5) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 78% 35%, rgba(255,255,255,0.7) 0%, transparent 100%),
+    radial-gradient(1px 1px at 32% 60%, rgba(255,255,255,0.4) 0%, transparent 100%),
+    radial-gradient(1px 1px at 90% 70%, rgba(255,255,255,0.5) 0%, transparent 100%),
+    radial-gradient(1px 1px at 5% 80%, rgba(255,255,255,0.4) 0%, transparent 100%),
+    radial-gradient(1px 1px at 68% 85%, rgba(255,255,255,0.5) 0%, transparent 100%),
+    radial-gradient(1px 1px at 42% 92%, rgba(255,255,255,0.3) 0%, transparent 100%),
+    radial-gradient(1px 1px at 25% 45%, rgba(255,255,255,0.4) 0%, transparent 100%),
+    radial-gradient(1px 1px at 87% 15%, rgba(255,255,255,0.5) 0%, transparent 100%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.container { position: relative; z-index: 1; max-width: 540px; margin: 0 auto; padding: 0 16px; }
+
+/* ===== HEADER ===== */
+header {
+  padding: 52px 16px 20px;
+  text-align: center;
+  position: relative;
+}
+.mission-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(77,168,255,0.1);
+  border: 1px solid rgba(77,168,255,0.25);
+  border-radius: 20px;
+  padding: 4px 14px;
+  font-family: var(--cond);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+.live-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #ff4444;
+  animation: blink 1.4s ease-in-out infinite;
+}
+@keyframes blink { 0%,100%{opacity:1;box-shadow:0 0 4px #ff4444} 50%{opacity:0.3;box-shadow:none} }
+h1 {
+  font-family: var(--cond);
+  font-size: 38px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  color: #fff;
+  margin-bottom: 4px;
+}
+h1 span { color: var(--accent); }
+.subhead {
+  font-size: 13px;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+  font-family: var(--mono);
+}
+.launch-time {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--accent2);
+  margin-top: 6px;
+  letter-spacing: 0.05em;
+}
+
+/* ===== MISSION CLOCK ===== */
+.clock-block {
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  border-radius: 12px;
+  padding: 18px;
+  margin: 0 16px 14px;
+  text-align: center;
+}
+.clock-label {
+  font-family: var(--cond);
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.clock-digits {
+  font-family: var(--mono);
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--accent2);
+  letter-spacing: 0.05em;
+}
+.clock-sub {
+  font-size: 11px;
+  color: var(--muted);
+  font-family: var(--mono);
+  margin-top: 4px;
+}
+
+/* ===== STAT GRID ===== */
+.stat-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 0 16px 14px;
+}
+.stat-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  position: relative;
+  overflow: hidden;
+}
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent-color, var(--accent)), transparent);
+}
+.stat-card.green { --accent-color: var(--accent2); }
+.stat-card.gold { --accent-color: var(--gold); }
+.stat-card.red { --accent-color: #ff6b6b; }
+.stat-label {
+  font-family: var(--cond);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.stat-val {
+  font-family: var(--mono);
+  font-size: 22px;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1;
+}
+.stat-unit {
+  font-size: 10px;
+  color: var(--muted);
+  font-family: var(--mono);
+  margin-top: 3px;
+}
+.stat-card-wide {
+  grid-column: 1 / -1;
+}
+
+/* ===== PROGRESS SECTION ===== */
+.section {
+  margin: 0 16px 14px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+}
+.section-header {
+  font-family: var(--cond);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin-bottom: 14px;
+}
+
+/* trajectory visual */
+.traj-wrap { position: relative; height: 90px; margin-bottom: 8px; }
+
+/* progress bar */
+.prog-bar-wrap { margin-top: 10px; }
+.prog-bar-bg {
+  height: 4px;
+  background: var(--bg3);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+.prog-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--accent2), var(--accent));
+  transition: width 1s ease;
+}
+.prog-labels { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); font-family: var(--mono); }
+
+/* ===== PHASES ===== */
+.phases { display: flex; flex-direction: column; gap: 8px; }
+.phase-item { display: flex; align-items: center; gap: 10px; }
+.phase-icon {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  font-size: 12px;
+}
+.phase-icon.done { background: rgba(0,229,192,0.15); border: 1px solid rgba(0,229,192,0.3); }
+.phase-icon.active { background: rgba(77,168,255,0.15); border: 1px solid rgba(77,168,255,0.4); animation: pulse-ring 2s infinite; }
+.phase-icon.future { background: var(--bg3); border: 1px solid var(--border); }
+@keyframes pulse-ring { 0%,100%{box-shadow:0 0 0 0 rgba(77,168,255,0.3)} 50%{box-shadow:0 0 0 5px rgba(77,168,255,0)} }
+.phase-info { flex: 1; }
+.phase-name { font-size: 13px; font-weight: 500; color: var(--text); }
+.phase-name.muted { color: var(--muted); }
+.phase-date { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+.phase-connector { width: 1px; height: 8px; background: var(--border); margin-left: 13px; }
+
+/* ===== PHOTO GALLERY ===== */
+.gallery-scroll {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.gallery-scroll::-webkit-scrollbar { display: none; }
+.photo-card {
+  flex-shrink: 0;
+  width: 200px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+}
+.photo-card img {
+  width: 100%;
+  height: 140px;
+  object-fit: cover;
+  display: block;
+}
+.photo-info { padding: 10px; }
+.photo-title { font-size: 12px; font-weight: 500; color: var(--text); line-height: 1.3; margin-bottom: 3px; }
+.photo-credit { font-size: 10px; color: var(--muted); font-family: var(--mono); }
+
+/* ===== CREW ===== */
+.crew-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.crew-card {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.crew-init {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+  letter-spacing: 0.05em;
+}
+.crew-name { font-size: 12px; font-weight: 600; color: #fff; line-height: 1.2; }
+.crew-role { font-size: 10px; color: var(--muted); margin-top: 2px; }
+.crew-org { font-size: 10px; font-family: var(--mono); }
+
+/* ===== RECORDS ===== */
+.records { display: flex; flex-direction: column; gap: 10px; }
+.record-row { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+.record-row:last-child { border-bottom: none; padding-bottom: 0; }
+.record-label { font-size: 12px; color: var(--muted); flex: 1; }
+.record-val { font-family: var(--mono); font-size: 13px; color: var(--accent); text-align: right; }
+
+/* ===== TODAY SECTION ===== */
+.today-items { display: flex; flex-direction: column; gap: 10px; }
+.today-item { display: flex; gap: 10px; }
+.today-time { font-family: var(--mono); font-size: 11px; color: var(--accent2); width: 52px; flex-shrink: 0; padding-top: 1px; }
+.today-desc { font-size: 13px; color: var(--text); line-height: 1.4; }
+
+/* ===== UPDATE BANNER ===== */
+.update-bar {
+  background: rgba(77,168,255,0.08);
+  border-top: 1px solid rgba(77,168,255,0.15);
+  border-bottom: 1px solid rgba(77,168,255,0.15);
+  padding: 10px 16px;
+  margin-bottom: 14px;
+  font-size: 12px;
+  color: var(--accent);
+  font-family: var(--mono);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.update-pulse { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); flex-shrink: 0; animation: blink 1.4s infinite; }
+
+/* ===== FOOTER ===== */
+footer {
+  padding: 20px 16px 28px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--muted);
+  font-family: var(--mono);
+}
+footer a { color: var(--accent); text-decoration: none; }
+
+/* ===== DIVIDER ===== */
+.divider { height: 1px; background: var(--border); margin: 0 16px 14px; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="mission-badge"><div class="live-dot"></div>Mission Active · Day <span id="hdr-day">3</span> of 10</div>
+  <h1>ARTEMIS<span> II</span></h1>
+  <div class="subhead">Orion "Integrity" · Lunar Free-Return Flyby</div>
+  <div class="launch-time">Mission Elapsed Time: <span id="clock">00:00:00:00</span></div>
+  <div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:3px;">Launched Apr 1 · 18:35 CST &nbsp;|&nbsp; Splashdown in <span id="countdown"></span></div>
+</header>
+
+<!-- LIVE BANNER -->
+<div class="update-bar">
+  <div class="update-pulse"></div>
+  <span id="live-banner">Orion on translunar coast · Approaching equidistance Earth/Moon</span>
+</div>
+
+<!-- TRAJECTORY -->
+<div class="section">
+  <div class="section-header">Live Trajectory</div>
+  <svg id="traj-svg" viewBox="0 0 340 90" xmlns="http://www.w3.org/2000/svg" style="width:100%;display:block;">
+    <!-- dashed future path -->
+    <path id="traj-dashed" d="M28,66 Q170,8 312,66" fill="none" stroke="rgba(106,122,148,0.3)" stroke-width="1.5" stroke-dasharray="4 5"/>
+    <!-- traveled path (updated by JS) -->
+    <path id="traj-traveled" d="" fill="none" stroke-width="2.5" stroke-linecap="round"/>
+    <defs>
+      <linearGradient id="traj-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+        <stop offset="0%" stop-color="#00e5c0"/>
+        <stop offset="100%" stop-color="#4da8ff"/>
+      </linearGradient>
+    </defs>
+    <!-- glow ring around Orion -->
+    <circle id="traj-glow" cx="28" cy="66" r="9" fill="none" stroke="rgba(77,168,255,0.22)" stroke-width="2"/>
+    <!-- Orion dot -->
+    <circle id="traj-dot" cx="28" cy="66" r="5" fill="#4da8ff"/>
+    <!-- Earth -->
+    <circle cx="28" cy="66" r="14" fill="#1a5fa8"/>
+    <text x="28" y="70" text-anchor="middle" font-size="9" font-weight="bold" fill="#7cc8f8" font-family="monospace">E</text>
+    <!-- Moon -->
+    <circle cx="312" cy="66" r="12" fill="#4a5568"/>
+    <text x="312" y="70" text-anchor="middle" font-size="9" font-weight="bold" fill="#a0aec0" font-family="monospace">M</text>
+  </svg>
+  <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);font-family:monospace;margin-top:4px;">
+    <span>🌍 Earth</span>
+    <span id="traj-pct" style="color:#4da8ff">— en route —</span>
+    <span>🌕 Moon flyby Apr 6</span>
+  </div>
+</div>
+
+<!-- DISTANCE/SPEED STATS -->
+<div class="stat-grid">
+  <div class="stat-card">
+    <div class="stat-label">From Earth</div>
+    <div class="stat-val" id="s-earth">—</div>
+    <div class="stat-unit">miles</div>
+  </div>
+  <div class="stat-card green">
+    <div class="stat-label">From Moon</div>
+    <div class="stat-val" id="s-moon">—</div>
+    <div class="stat-unit">miles</div>
+  </div>
+  <div class="stat-card gold">
+    <div class="stat-label">Speed</div>
+    <div class="stat-val" id="s-speed">—</div>
+    <div class="stat-unit">mph · ~<span id="s-mps">—</span> mi/s</div>
+  </div>
+  <div class="stat-card red">
+    <div class="stat-label">% to Moon</div>
+    <div class="stat-val" id="s-pct">—</div>
+    <div class="stat-unit">of 240,000 mi</div>
+  </div>
+  <div class="stat-card stat-card-wide" style="--accent-color:rgba(255,255,255,0.2)">
+    <div class="stat-label">Journey progress — Earth ▸ Flyby ▸ Splashdown</div>
+    <div style="margin-top:8px;">
+      <div class="prog-bar-bg"><div class="prog-bar-fill" id="mission-prog" style="width:28%"></div></div>
+      <div class="prog-labels"><span>Apr 1 Launch</span><span>Apr 6 Flyby</span><span>Apr 10 Splash</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- CREW PHOTOS -->
+<div class="section">
+  <div class="section-header">Photos from Orion · Released Apr 3</div>
+  <div class="gallery-scroll">
+    <div class="photo-card">
+      <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/9/97/Earth_from_Orion_Artemis_II_%28art002e000190%29.jpg/400px-Earth_from_Orion_Artemis_II_%28art002e000190%29.jpg"
+           onerror="this.closest('.photo-card').querySelector('.photo-placeholder').style.display='flex';this.style.display='none';"
+           alt="Earth from Orion window with aurora" style="width:100%;height:140px;object-fit:cover;display:block;">
+      <div class="photo-placeholder" style="display:none;height:140px;background:#0c1628;align-items:center;justify-content:center;flex-direction:column;gap:6px;">
+        <div style="font-size:22px;">🌍</div>
+        <div style="font-size:10px;color:#6a7a94;font-family:monospace;text-align:center;">Earth — aurora + zodiacal light<br><a href="https://www.nasa.gov/image-article/hello-world/" target="_blank" style="color:#4da8ff;">View on NASA ↗</a></div>
+      </div>
+      <div class="photo-info">
+        <div class="photo-title">Earth — aurora + zodiacal light</div>
+        <div class="photo-credit">Wiseman · Apr 2 post-TLI burn</div>
+      </div>
+    </div>
+    <div class="photo-card">
+      <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/a/a8/Earth_from_Orion_Artemis_II_%28art002e000191%29.jpg/400px-Earth_from_Orion_Artemis_II_%28art002e000191%29.jpg"
+           onerror="this.closest('.photo-card').querySelector('.photo-placeholder').style.display='flex';this.style.display='none';"
+           alt="Pale blue dot through Orion window" style="width:100%;height:140px;object-fit:cover;display:block;">
+      <div class="photo-placeholder" style="display:none;height:140px;background:#0c1628;align-items:center;justify-content:center;flex-direction:column;gap:6px;">
+        <div style="font-size:22px;">🔵</div>
+        <div style="font-size:10px;color:#6a7a94;font-family:monospace;text-align:center;">Pale blue dot through window<br><a href="https://www.nasa.gov/gallery/journey-to-the-moon/" target="_blank" style="color:#4da8ff;">View on NASA ↗</a></div>
+      </div>
+      <div class="photo-info">
+        <div class="photo-title">Pale blue dot through Orion window</div>
+        <div class="photo-credit">Wiseman · Apr 3 Flight Day 3</div>
+      </div>
+    </div>
+    <div class="photo-card">
+      <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/b/b4/Artemis_II_launch_%28KSC-20260401%29.jpg/400px-Artemis_II_launch_%28KSC-20260401%29.jpg"
+           onerror="this.closest('.photo-card').querySelector('.photo-placeholder').style.display='flex';this.style.display='none';"
+           alt="Artemis II SLS launch" style="width:100%;height:140px;object-fit:cover;display:block;">
+      <div class="photo-placeholder" style="display:none;height:140px;background:#0c1628;align-items:center;justify-content:center;flex-direction:column;gap:6px;">
+        <div style="font-size:22px;">🚀</div>
+        <div style="font-size:10px;color:#6a7a94;font-family:monospace;text-align:center;">SLS lifts off from LC-39B<br><a href="https://www.nasa.gov/gallery/artemis-ii-launch/" target="_blank" style="color:#4da8ff;">View on NASA ↗</a></div>
+      </div>
+      <div class="photo-info">
+        <div class="photo-title">SLS lifts off from LC-39B</div>
+        <div class="photo-credit">NASA · Apr 1 · 18:35 CST</div>
+      </div>
+    </div>
+    <div class="photo-card" style="background:var(--bg3);border:1px solid var(--border);display:flex;flex-direction:column;justify-content:center;align-items:center;min-height:200px;flex-shrink:0;width:200px;border-radius:10px;">
+      <div style="font-size:28px;margin-bottom:8px;">📡</div>
+      <div style="font-size:12px;color:var(--muted);text-align:center;padding:0 16px;line-height:1.5;">More photos expected<br>during lunar flyby Apr 6</div>
+      <a href="https://www.nasa.gov/artemis-ii-multimedia/" target="_blank" 
+         style="margin-top:10px;font-size:11px;color:var(--accent);font-family:var(--mono);text-decoration:none;">NASA gallery ↗</a>
+    </div>
+  </div>
+</div>
+
+<!-- MISSION PHASES -->
+<div class="section">
+  <div class="section-header">Mission Phases</div>
+  <div class="phases">
+    <div class="phase-item">
+      <div class="phase-icon done">✓</div>
+      <div class="phase-info">
+        <div class="phase-name">Launch &amp; Earth orbit checkout</div>
+        <div class="phase-date">Apr 1 · 22:35 UTC · 46,000 mi orbit</div>
+      </div>
+    </div>
+    <div class="phase-connector"></div>
+    <div class="phase-item">
+      <div class="phase-icon done">✓</div>
+      <div class="phase-info">
+        <div class="phase-name">Proximity ops demo + TLI burn</div>
+        <div class="phase-date">Apr 2 · 5 min 50 sec engine burn</div>
+      </div>
+    </div>
+    <div class="phase-connector"></div>
+    <div class="phase-item">
+      <div class="phase-icon active">→</div>
+      <div class="phase-info">
+        <div class="phase-name">Translunar coast to Moon</div>
+        <div class="phase-date">Apr 3–5 · ~106K mi from Earth now</div>
+      </div>
+    </div>
+    <div class="phase-connector"></div>
+    <div class="phase-item">
+      <div class="phase-icon future">◯</div>
+      <div class="phase-info">
+        <div class="phase-name muted">Lunar flyby + solar eclipse</div>
+        <div class="phase-date">Apr 6 · ~5,000 mi beyond far side</div>
+      </div>
+    </div>
+    <div class="phase-connector"></div>
+    <div class="phase-item">
+      <div class="phase-icon future">◯</div>
+      <div class="phase-info">
+        <div class="phase-name muted">Return trajectory burns</div>
+        <div class="phase-date">Apr 7–9 · 3 correction burns</div>
+      </div>
+    </div>
+    <div class="phase-connector"></div>
+    <div class="phase-item">
+      <div class="phase-icon future">◯</div>
+      <div class="phase-info">
+        <div class="phase-name muted">Reentry &amp; Pacific splashdown</div>
+        <div class="phase-date">Apr 10 · ~25,000 mph reentry</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TODAY'S ACTIVITIES -->
+<div class="section">
+  <div class="section-header">Day 3 Activities (Today · Apr 3 · CST)</div>
+  <div class="today-items">
+    <div class="today-item">
+      <div class="today-time">12:00 CST</div>
+      <div class="today-desc">Crew wake-up · system checks · public affairs event</div>
+    </div>
+    <div class="today-item">
+      <div class="today-time">Midday</div>
+      <div class="today-desc">CPR &amp; emergency medical procedure demonstration in microgravity</div>
+    </div>
+    <div class="today-item">
+      <div class="today-time">Ongoing</div>
+      <div class="today-desc">Configuring cabin for lunar flyby photography · 80–400mm &amp; 14–24mm lens setup</div>
+    </div>
+    <div class="today-item">
+      <div class="today-time">17:00 CST</div>
+      <div class="today-desc">Koch tests Deep Space Network emergency comms system</div>
+    </div>
+    <div class="today-item">
+      <div class="today-time">17:49 CST</div>
+      <div class="today-desc">First OTC burn (~8 sec) · fine-tuning trajectory to Moon</div>
+    </div>
+  </div>
+</div>
+
+<!-- CREW -->
+<div class="section">
+  <div class="section-header">Crew Aboard Orion "Integrity"</div>
+  <div class="crew-grid">
+    <div class="crew-card">
+      <div class="crew-init" style="background:rgba(77,168,255,0.15);border:1px solid rgba(77,168,255,0.3);color:var(--accent)">RW</div>
+      <div>
+        <div class="crew-name">Reid Wiseman</div>
+        <div class="crew-role">Commander</div>
+        <div class="crew-org" style="color:var(--accent)">NASA</div>
+      </div>
+    </div>
+    <div class="crew-card">
+      <div class="crew-init" style="background:rgba(0,229,192,0.1);border:1px solid rgba(0,229,192,0.25);color:var(--accent2)">VG</div>
+      <div>
+        <div class="crew-name">Victor Glover</div>
+        <div class="crew-role">Pilot</div>
+        <div class="crew-org" style="color:var(--accent2)">NASA</div>
+      </div>
+    </div>
+    <div class="crew-card">
+      <div class="crew-init" style="background:rgba(245,166,35,0.1);border:1px solid rgba(245,166,35,0.25);color:var(--gold)">CK</div>
+      <div>
+        <div class="crew-name">Christina Koch</div>
+        <div class="crew-role">Mission Specialist</div>
+        <div class="crew-org" style="color:var(--gold)">NASA</div>
+      </div>
+    </div>
+    <div class="crew-card">
+      <div class="crew-init" style="background:rgba(180,150,255,0.1);border:1px solid rgba(180,150,255,0.25);color:#b49cff">JH</div>
+      <div>
+        <div class="crew-name">Jeremy Hansen</div>
+        <div class="crew-role">Mission Specialist</div>
+        <div class="crew-org" style="color:#b49cff">CSA 🇨🇦</div>
+      </div>
+    </div>
+  </div>
+  <div style="margin-top:12px;font-size:11px;color:var(--muted);line-height:1.7;font-family:var(--mono);">
+    First humans beyond Earth orbit since Apollo 17 (Dec 1972) · 
+    Glover: first person of color · Koch: first woman · Hansen: first non-US citizen to deep space
+  </div>
+</div>
+
+<!-- MISSION RECORDS -->
+<div class="section">
+  <div class="section-header">Records This Mission Will Set</div>
+  <div class="records">
+    <div class="record-row">
+      <div class="record-label">Max distance from Earth</div>
+      <div class="record-val">252,799 mi</div>
+    </div>
+    <div class="record-row">
+      <div class="record-label">Distance beyond Moon</div>
+      <div class="record-val">~4,700 mi</div>
+    </div>
+    <div class="record-row">
+      <div class="record-label">Reentry speed</div>
+      <div class="record-val">~25,000 mph</div>
+    </div>
+    <div class="record-row">
+      <div class="record-label">First crewed Orion flight</div>
+      <div class="record-val">✓ Historic</div>
+    </div>
+    <div class="record-row">
+      <div class="record-label">Total mission distance</div>
+      <div class="record-val">~685,000 mi</div>
+    </div>
+    <div class="record-row">
+      <div class="record-label">First deep space crew since</div>
+      <div class="record-val">Dec 1972</div>
+    </div>
+  </div>
+</div>
+
+<!-- MISSION FACTS -->
+<div class="section">
+  <div class="section-header">Key Facts</div>
+  <div class="records">
+    <div class="record-row">
+      <div class="record-label">Spacecraft name</div>
+      <div class="record-val">Integrity</div>
+    </div>
+    <div class="record-row">
+      <div class="record-label">Launch vehicle</div>
+      <div class="record-val">SLS Block 1</div>
+    </div>
+    <div class="record-row">
+      <div class="record-label">Mission duration</div>
+      <div class="record-val">~10 days</div>
+    </div>
+    <div class="record-row">
+      <div class="record-label">Trajectory type</div>
+      <div class="record-val">Free-return</div>
+    </div>
+    <div class="record-row">
+      <div class="record-label">Splashdown</div>
+      <div class="record-val">Pacific · San Diego</div>
+    </div>
+    <div class="record-row">
+      <div class="record-label">Lunar flyby</div>
+      <div class="record-val">Apr 6 ~13:00 ET</div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <div>Data: NASA AROW · nasa.gov/artemis-ii</div>
+  <div style="margin-top:4px;">Position estimated from last known data (106K mi, 2:30 PM ET Apr 3)</div>
+  <div style="margin-top:8px;">
+    <a href="https://www.nasa.gov/missions/artemis/artemis-2/track-nasas-artemis-ii-mission-in-real-time/" target="_blank">NASA AROW Live Tracker ↗</a>
+    &nbsp;·&nbsp;
+    <a href="https://www.nasa.gov/artemis-ii-multimedia/" target="_blank">Official Photos ↗</a>
+    &nbsp;·&nbsp;
+    <a href="https://www.youtube.com/@NASA" target="_blank">NASA Live ↗</a>
+  </div>
+</footer>
+
+<script>
+const LAUNCH = new Date('2026-04-01T22:35:00Z').getTime();
+const SPLASH = new Date('2026-04-10T17:00:00Z').getTime();
+const FLYBY  = new Date('2026-04-06T17:00:00Z').getTime();
+const KNOWN_TIME = new Date('2026-04-03T18:30:00Z').getTime();
+const EARTH_AT_KNOWN = 106000;
+const MOON_AT_KNOWN  = 157000;
+const SPEED_AT_KNOWN = 3700;
+const TOTAL_TO_MOON  = 244000;
+
+function pad(n,w=2){return String(Math.floor(n)).padStart(w,'0');}
+
+function calcOrion() {
+  const now = Date.now();
+  const elapsed_h = (now - KNOWN_TIME) / 3600000;
+  const speed = Math.max(3100, SPEED_AT_KNOWN - elapsed_h * 8);
+  const dEarth = Math.round(EARTH_AT_KNOWN + speed * elapsed_h);
+  const dMoon  = Math.max(5000, Math.round(MOON_AT_KNOWN - speed * elapsed_h));
+  return { dEarth, dMoon, speed: Math.round(speed) };
+}
+
+function updateClock() {
+  const now = Date.now();
+  const elap = now - LAUNCH;
+  const d = Math.floor(elap / 86400000);
+  const h = Math.floor((elap % 86400000) / 3600000);
+  const m = Math.floor((elap % 3600000) / 60000);
+  const s = Math.floor((elap % 60000) / 1000);
+  document.getElementById('clock').textContent = `${pad(d)}d ${pad(h)}h ${pad(m)}m ${pad(s)}s`;
+  document.getElementById('hdr-day').textContent = Math.min(10, d + 1);
+
+  const rem = SPLASH - now;
+  const rd = Math.floor(rem / 86400000);
+  const rh = Math.floor((rem % 86400000) / 3600000);
+  const rm = Math.floor((rem % 3600000) / 60000);
+  document.getElementById('countdown').textContent = `${rd}d ${pad(rh)}h ${pad(rm)}m`;
+
+  const { dEarth, dMoon, speed } = calcOrion();
+  document.getElementById('s-earth').textContent = dEarth.toLocaleString();
+  document.getElementById('s-moon').textContent  = dMoon.toLocaleString();
+  document.getElementById('s-speed').textContent = speed.toLocaleString();
+  document.getElementById('s-mps').textContent   = (speed / 3600).toFixed(1);
+
+  const pctToMoon = Math.min(99, Math.round((dEarth / TOTAL_TO_MOON) * 100));
+  document.getElementById('s-pct').textContent = pctToMoon + '%';
+
+  const missionTotal = SPLASH - LAUNCH;
+  const missionElap  = now - LAUNCH;
+  const mPct = Math.min(98, Math.round((missionElap / missionTotal) * 100));
+  document.getElementById('mission-prog').style.width = mPct + '%';
+  document.getElementById('traj-pct').textContent = `${dEarth.toLocaleString()} mi from Earth`;
+}
+
+function drawTrajectory() {
+  const { dEarth } = calcOrion();
+  const t = Math.min(0.97, dEarth / TOTAL_TO_MOON);
+
+  // Quadratic bezier: P0=(28,66) CP=(170,8) P1=(312,66)
+  const p0x=28,p0y=66, cpx=170,cpy=8, p1x=312,p1y=66;
+  function bez(tt) {
+    return [
+      (1-tt)*(1-tt)*p0x + 2*(1-tt)*tt*cpx + tt*tt*p1x,
+      (1-tt)*(1-tt)*p0y + 2*(1-tt)*tt*cpy + tt*tt*p1y
+    ];
+  }
+
+  // Build traveled path string
+  let d = `M${p0x},${p0y}`;
+  const steps = 40;
+  for (let i = 1; i <= steps; i++) {
+    const [x, y] = bez((i / steps) * t);
+    d += ` L${x.toFixed(1)},${y.toFixed(1)}`;
+  }
+  document.getElementById('traj-traveled').setAttribute('d', d);
+  document.getElementById('traj-traveled').setAttribute('stroke', 'url(#traj-grad)');
+
+  // Move Orion dot and glow
+  const [ox, oy] = bez(t);
+  document.getElementById('traj-dot').setAttribute('cx', ox.toFixed(1));
+  document.getElementById('traj-dot').setAttribute('cy', oy.toFixed(1));
+  document.getElementById('traj-glow').setAttribute('cx', ox.toFixed(1));
+  document.getElementById('traj-glow').setAttribute('cy', oy.toFixed(1));
+}
+
+updateClock();
+drawTrajectory();
+setInterval(updateClock, 1000);
+setInterval(drawTrajectory, 10000);
+</script>
+</body>
+</html>
