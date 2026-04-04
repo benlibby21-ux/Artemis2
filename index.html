@@ -507,19 +507,19 @@ footer a { color: var(--accent); text-decoration: none; }
 
   <div style="margin-bottom:10px;">
     <div style="font-family:var(--mono);font-size:10px;color:var(--accent2);margin-bottom:3px;">● LIVE · JPL Horizons</div>
-    <div style="color:var(--muted);font-size:11px;">Every 2 minutes the tracker queries NASA's JPL Horizons API for Orion's exact position and velocity vectors in space, plus the Moon's current position. Both are fetched from Earth's center in the Earth Mean Equatorial frame. Distance from Earth and distance from Moon are computed directly from those coordinates — no estimation involved.</div>
+    <div style="color:var(--muted);font-size:11px;">Every 2 minutes the tracker queries NASA's JPL Horizons API for Orion's position and velocity vectors in space, plus the Moon's current position. Both are fetched from Earth's center in the Earth-centered equatorial reference plane. Distance from Earth and distance from Moon are computed directly from those coordinates when full live mode is available.</div>
   </div>
 
   <div style="border-top:1px solid var(--border);padding-top:10px;margin-bottom:10px;">
     <div style="font-family:var(--mono);font-size:10px;color:var(--gold);margin-bottom:3px;">◌ Est · fetching  &nbsp;/&nbsp; ○ Est · dead-reckoned</div>
-    <div style="color:var(--muted);font-size:11px;">While live data is loading, numbers are projected forward from the last known position using Orion's last recorded speed and a measured deceleration of ~3.5 mph per hour — the rate at which Earth's gravity slows the spacecraft on the outbound leg. If you've loaded this page before, that projection starts from your last live reading rather than a hardcoded anchor, so estimates are as fresh as your most recent session.</div>
+    <div style="color:var(--muted);font-size:11px;">While live data is loading or unavailable, numbers are projected forward from the last known position using Orion's last recorded speed and a simple deceleration estimate of ~3.5 mph per hour. This is only a visual fallback, not a full orbital model, so it can drift over time.</div>
   </div>
 
   <div style="border-top:1px solid var(--border);padding-top:10px;">
     <div style="font-family:var(--cond);font-size:10px;letter-spacing:0.1em;color:var(--muted);text-transform:uppercase;margin-bottom:6px;">The four numbers</div>
     <div style="display:grid;gap:5px;">
       <div><span style="font-family:var(--mono);font-size:10px;color:var(--accent);">From Earth</span> <span style="color:var(--muted);font-size:11px;">— straight-line distance from Earth's center to Orion right now.</span></div>
-      <div><span style="font-family:var(--mono);font-size:10px;color:var(--accent2);">From Moon / To Moon Flyby</span> <span style="color:var(--muted);font-size:11px;">— when live: actual vector distance to the Moon. When estimated: approximate distance based on the Moon's flyby position (~251,639 mi from Earth on Apr 6).</span></div>
+      <div><span style="font-family:var(--mono);font-size:10px;color:var(--accent2);">From Moon / To Moon Flyby</span> <span style="color:var(--muted);font-size:11px;">— when full live mode is active: actual vector distance to the Moon. In fallback mode: a rough countdown based on Orion's outbound progress, not the Moon's exact live position.</span></div>
       <div><span style="font-family:var(--mono);font-size:10px;color:var(--gold);">Speed</span> <span style="color:var(--muted);font-size:11px;">— magnitude of Orion's velocity vector in the Earth equatorial frame. The km/s value shown is the raw Horizons output before unit conversion.</span></div>
       <div><span style="font-family:var(--mono);font-size:10px;color:#ff6b6b;">% to Moon</span> <span style="color:var(--muted);font-size:11px;">— how far Orion has travelled as a percentage of the Earth–Moon distance at flyby time (251,639 mi). Hits ~100% at closest approach on Apr 6.</span></div>
     </div>
@@ -812,13 +812,27 @@ footer a { color: var(--accent); text-decoration: none; }
 const LAUNCH = new Date('2026-04-01T22:35:00Z').getTime();
 const SPLASH = new Date('2026-04-10T18:21:00Z').getTime();
 const FLYBY  = new Date('2026-04-06T17:00:00Z').getTime();
-const TOTAL_TO_MOON = 252757; // mi — mission max distance (beyond Moon far side, Apr 6)
+const TOTAL_TO_MOON = 252757; // mi — visual trajectory scaling only
 
 const MI_TO_KM = 1.60934;
 const KM_TO_MI = 0.621371;
 
 let useMetric = false;
 let liveTelemetry = null; // { dEarthMi, dMoonMi, speedMph, speedKms, fetchedAt }
+
+function getTelemetryState() {
+  if (liveTelemetry?.source === 'live') return 'live';
+  if (liveTelemetry?.source === 'orion-only') return 'orion-only';
+  if (cachedTelemetry) return 'cached';
+  return 'anchor';
+}
+
+function getMoonProgressPct(dEarth, dMoon, telemetryState) {
+  if (telemetryState === 'live' && Number.isFinite(dEarth) && Number.isFinite(dMoon) && (dEarth + dMoon) > 0) {
+    return Math.max(0, Math.min(100, Math.round((dEarth / (dEarth + dMoon)) * 100)));
+  }
+  return Math.max(0, Math.min(99, Math.round((dEarth / FLYBY_EARTH_MOON_MI) * 100)));
+}
 
 // ===== PERSISTED ANCHOR =====
 // On startup, load the last successful live fetch from localStorage.
@@ -898,7 +912,7 @@ async function fetchHorizonsVector(commandId, atTime) {
     STEP_SIZE: "'10m'",
     VEC_TABLE: "'2'",
     OUT_UNITS: "'KM-S'",
-    REF_PLANE: "'FRAME'",
+    REF_PLANE: "'EARTH'",
     VEC_LABELS: "'NO'",
     CSV_FORMAT: "'YES'",
   });
@@ -992,7 +1006,7 @@ async function refreshLiveTelemetry() {
       const dEarthMi = dEarthKm * KM_TO_MI;
       liveTelemetry = {
         dEarthMi,
-        dMoonMi: Math.max(4700, FLYBY_EARTH_MOON_MI - dEarthMi),
+        dMoonMi: Math.max(0, FLYBY_EARTH_MOON_MI - dEarthMi),
         speedMph: speedKms * 3600 * KM_TO_MI,
         speedKms,
         fetchedAt: Date.now(),
@@ -1019,24 +1033,39 @@ async function refreshLiveTelemetry() {
 }
 
 function calcOrion() {
-  // Priority: live this session > cached from last session > hardcoded Apr 4 anchor
   const src = liveTelemetry || cachedTelemetry || {
     dEarthMi: ANCHOR_EARTH,
-    dMoonMi:  ANCHOR_MOON,
+    dMoonMi: ANCHOR_MOON,
     speedMph: ANCHOR_SPEED,
     fetchedAt: ANCHOR_TIME,
+    source: cachedTelemetry ? 'cached' : 'anchor'
   };
+
+  const telemetryState = getTelemetryState();
   const elapsedH = (Date.now() - src.fetchedAt) / 3600000;
-  const speed  = Math.max(1200, src.speedMph - elapsedH * DECEL_RATE);
-  const dEarth = Math.round(src.dEarthMi + speed * elapsedH);
-  const dMoon  = Math.max(0, Math.round(src.dMoonMi - speed * elapsedH));
+  const speed = Math.max(1200, src.speedMph - elapsedH * DECEL_RATE);
+
+  let dEarth = src.dEarthMi;
+  let dMoon = src.dMoonMi;
+
+  if (telemetryState === 'cached' || telemetryState === 'anchor') {
+    dEarth = src.dEarthMi + speed * elapsedH;
+    dMoon = Math.max(0, src.dMoonMi - speed * elapsedH);
+  }
+
   const speedKms = src.speedKms || null;
-  return { dEarth, dMoon, speed: Math.round(speed), speedKms };
+  return {
+    dEarth: Math.round(dEarth),
+    dMoon: Math.round(Math.max(0, dMoon)),
+    speed: Math.round(speed),
+    speedKms,
+    telemetryState
+  };
 }
 
 function updateBanner() {
   const now = Date.now();
-  const { dEarth, dMoon, speed } = calcOrion();
+  const { dEarth, dMoon, speed, telemetryState } = calcOrion();
   const banner = document.getElementById('live-banner');
   if (!banner) return;
 
@@ -1069,6 +1098,10 @@ function updateBanner() {
     msg = `Orion on return trajectory · ${hoursToSplash}h to splashdown · ${dEarth.toLocaleString()} mi from Earth`;
   } else {
     msg = '🎉 Splashdown! Artemis II mission complete';
+  }
+
+  if (telemetryState !== 'live' && now < SPLASH) {
+    msg += ' · estimated';
   }
 
   banner.textContent = msg;
@@ -1105,7 +1138,7 @@ function updateClock() {
   const rm = Math.floor((rem % 3600000) / 60000);
   document.getElementById('countdown').textContent = `${rd}d ${pad(rh)}h ${pad(rm)}m`;
 
-  const { dEarth, dMoon, speed, speedKms } = calcOrion();
+  const { dEarth, dMoon, speed, speedKms, telemetryState } = calcOrion();
   document.getElementById('s-earth').textContent = fmt(dEarth);
   document.getElementById('s-moon').textContent  = fmt(dMoon);
 
@@ -1122,7 +1155,7 @@ function updateClock() {
     }
   }
 
-  const pctToMoon = Math.min(99, Math.round((dEarth / FLYBY_EARTH_MOON_MI) * 100));
+  const pctToMoon = getMoonProgressPct(dEarth, dMoon, telemetryState);
   document.getElementById('s-pct').textContent = pctToMoon + '%';
   document.getElementById('denier-distance').textContent = fmt(dMoon);
 
@@ -1131,9 +1164,13 @@ function updateClock() {
   const mPct = Math.min(98, Math.round((missionElap / missionTotal) * 100));
   document.getElementById('mission-prog').style.width = mPct + '%';
 
-  const distLabel = useMetric
-    ? `${Math.round(dEarth * MI_TO_KM).toLocaleString()} km from Earth`
-    : `${dEarth.toLocaleString()} mi from Earth`;
+  const distLabel = telemetryState === 'live'
+    ? (useMetric
+        ? `${Math.round(dEarth * MI_TO_KM).toLocaleString()} km from Earth`
+        : `${dEarth.toLocaleString()} mi from Earth`)
+    : (useMetric
+        ? `${Math.round(dEarth * MI_TO_KM).toLocaleString()} km est.`
+        : `${dEarth.toLocaleString()} mi est.`);
   document.getElementById('traj-pct').textContent = distLabel;
 
   updateBanner();
