@@ -349,11 +349,53 @@ footer {
 }
 footer a { color: var(--accent); text-decoration: none; }
 
+/* ===== UNIT TOGGLE ===== */
+.unit-toggle {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+}
+.unit-toggle button {
+  background: none;
+  border: none;
+  padding: 6px 14px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  color: var(--muted);
+  transition: background 0.2s, color 0.2s;
+}
+.unit-toggle button.active {
+  background: rgba(77,168,255,0.18);
+  color: var(--accent);
+}
+.unit-toggle button:hover:not(.active) {
+  background: rgba(255,255,255,0.05);
+  color: var(--text);
+}
+
 /* ===== DIVIDER ===== */
 .divider { height: 1px; background: var(--border); margin: 0 16px 14px; }
 </style>
 </head>
 <body>
+
+<!-- UNIT TOGGLE -->
+<div class="unit-toggle">
+  <button id="btn-imperial" class="active" onclick="setUnits('imperial')">MI</button>
+  <button id="btn-metric" onclick="setUnits('metric')">KM</button>
+</div>
 
 <!-- HEADER -->
 <header>
@@ -407,22 +449,22 @@ footer a { color: var(--accent); text-decoration: none; }
   <div class="stat-card">
     <div class="stat-label">From Earth</div>
     <div class="stat-val" id="s-earth">—</div>
-    <div class="stat-unit">miles</div>
+    <div class="stat-unit"><span class="unit-mi">miles</span><span class="unit-km" style="display:none">km</span></div>
   </div>
   <div class="stat-card green">
     <div class="stat-label">From Moon</div>
     <div class="stat-val" id="s-moon">—</div>
-    <div class="stat-unit">miles</div>
+    <div class="stat-unit"><span class="unit-mi">miles</span><span class="unit-km" style="display:none">km</span></div>
   </div>
   <div class="stat-card gold">
     <div class="stat-label">Speed</div>
     <div class="stat-val" id="s-speed">—</div>
-    <div class="stat-unit">mph · ~<span id="s-mps">—</span> mi/s</div>
+    <div class="stat-unit"><span class="unit-mi">mph · ~<span id="s-mps">—</span> mi/s</span><span class="unit-km" style="display:none">km/h · ~<span id="s-kps">—</span> km/s</span></div>
   </div>
   <div class="stat-card red">
     <div class="stat-label">% to Moon</div>
     <div class="stat-val" id="s-pct">—</div>
-    <div class="stat-unit">of 240,000 mi</div>
+    <div class="stat-unit"><span class="unit-mi">of 240,000 mi</span><span class="unit-km" style="display:none">of 386,000 km</span></div>
   </div>
   <div class="stat-card stat-card-wide" style="--accent-color:rgba(255,255,255,0.2)">
     <div class="stat-label">Journey progress — Earth ▸ Flyby ▸ Splashdown</div>
@@ -713,15 +755,15 @@ footer a { color: var(--accent); text-decoration: none; }
   <div class="records">
     <div class="record-row">
       <div class="record-label">Max distance from Earth</div>
-      <div class="record-val">252,799 mi</div>
+      <div class="record-val"><span class="unit-mi">252,799 mi</span><span class="unit-km" style="display:none">406,900 km</span></div>
     </div>
     <div class="record-row">
       <div class="record-label">Distance beyond Moon</div>
-      <div class="record-val">~4,700 mi</div>
+      <div class="record-val"><span class="unit-mi">~4,700 mi</span><span class="unit-km" style="display:none">~7,600 km</span></div>
     </div>
     <div class="record-row">
       <div class="record-label">Reentry speed</div>
-      <div class="record-val">~25,000 mph</div>
+      <div class="record-val"><span class="unit-mi">~25,000 mph</span><span class="unit-km" style="display:none">~40,200 km/h</span></div>
     </div>
     <div class="record-row">
       <div class="record-label">First crewed Orion flight</div>
@@ -729,7 +771,7 @@ footer a { color: var(--accent); text-decoration: none; }
     </div>
     <div class="record-row">
       <div class="record-label">Total mission distance</div>
-      <div class="record-val">~685,000 mi</div>
+      <div class="record-val"><span class="unit-mi">~685,000 mi</span><span class="unit-km" style="display:none">~1,102,000 km</span></div>
     </div>
     <div class="record-row">
       <div class="record-label">First deep space crew since</div>
@@ -785,13 +827,13 @@ footer a { color: var(--accent); text-decoration: none; }
     We're doing it again. Still real. Always was. 🚀
   </div>
   <div style="margin-top:12px; font-family:var(--cond); font-size:13px; color:#ff6b6b; letter-spacing:0.08em;">
-    We are currently <span id="denier-distance">—</span> miles away from something that doesn't exist.
+    We are currently <span id="denier-distance">—</span> <span class="unit-mi">miles</span><span class="unit-km" style="display:none">km</span> away from something that doesn't exist.
   </div>
 </div>
 
 <footer>
   <div>Data: NASA AROW · nasa.gov/artemis-ii</div>
-  <div style="margin-top:4px;">Position anchored to confirmed telemetry (133,660 mi · 10:06 PM ET Apr 3)</div>
+  <div style="margin-top:4px;">Position anchored to confirmed telemetry (<span class="unit-mi">159,977 mi</span><span class="unit-km" style="display:none">257,500 km</span> · 7:50 AM CST Apr 4)</div>
   <div style="margin-top:8px;">
     <a href="https://www.nasa.gov/missions/artemis/artemis-2/track-nasas-artemis-ii-mission-in-real-time/" target="_blank">NASA AROW Live Tracker ↗</a>
     &nbsp;·&nbsp;
@@ -805,23 +847,42 @@ footer a { color: var(--accent); text-decoration: none; }
 const LAUNCH = new Date('2026-04-01T22:35:00Z').getTime();
 const SPLASH = new Date('2026-04-10T18:21:00Z').getTime();
 const FLYBY  = new Date('2026-04-06T17:00:00Z').getTime();
-// Anchor: MET 02:04:30 = Apr 3 2026 ~03:09 UTC — screenshot confirmed
-// 133,660 mi from Earth · 138,118 mi to Moon · 3,058 mph
-const KNOWN_TIME     = new Date('2026-04-04T03:09:00Z').getTime();
-const EARTH_AT_KNOWN = 133660;
-const MOON_AT_KNOWN  = 138118;
-const SPEED_AT_KNOWN = 3058;
+// Anchor: 7:50 AM CST Apr 4 2026 = 13:50 UTC — NASA AROW screenshot confirmed
+// 159,977 mi from Earth · 118,109 mi to Moon · 2,543 mph
+const KNOWN_TIME     = new Date('2026-04-04T13:50:00Z').getTime();
+const EARTH_AT_KNOWN = 159977;
+const MOON_AT_KNOWN  = 118109;
+const SPEED_AT_KNOWN = 2543;
 const TOTAL_TO_MOON  = 252757;
+
+const MI_TO_KM = 1.60934;
+
+let useMetric = false;
 
 function pad(n,w=2){return String(Math.floor(n)).padStart(w,'0');}
 
 function calcOrion() {
   const now = Date.now();
   const elapsed_h = (now - KNOWN_TIME) / 3600000;
-  const speed = Math.max(2200, SPEED_AT_KNOWN - elapsed_h * 3.5);
+  const speed = Math.max(1800, SPEED_AT_KNOWN - elapsed_h * 5.2);
   const dEarth = Math.round(EARTH_AT_KNOWN + speed * elapsed_h);
   const dMoon  = Math.max(4700, Math.round(MOON_AT_KNOWN - speed * elapsed_h));
   return { dEarth, dMoon, speed: Math.round(speed) };
+}
+
+function setUnits(mode) {
+  useMetric = (mode === 'metric');
+  document.getElementById('btn-imperial').classList.toggle('active', !useMetric);
+  document.getElementById('btn-metric').classList.toggle('active', useMetric);
+  // Show/hide unit label spans
+  document.querySelectorAll('.unit-mi').forEach(el => el.style.display = useMetric ? 'none' : '');
+  document.querySelectorAll('.unit-km').forEach(el => el.style.display = useMetric ? '' : 'none');
+  updateClock();
+}
+
+function fmt(miles) {
+  if (useMetric) return Math.round(miles * MI_TO_KM).toLocaleString();
+  return Math.round(miles).toLocaleString();
 }
 
 function updateClock() {
@@ -841,20 +902,31 @@ function updateClock() {
   document.getElementById('countdown').textContent = `${rd}d ${pad(rh)}h ${pad(rm)}m`;
 
   const { dEarth, dMoon, speed } = calcOrion();
-  document.getElementById('s-earth').textContent = dEarth.toLocaleString();
-  document.getElementById('s-moon').textContent  = dMoon.toLocaleString();
-  document.getElementById('s-speed').textContent = speed.toLocaleString();
-  document.getElementById('s-mps').textContent   = (speed / 3600).toFixed(1);
+  document.getElementById('s-earth').textContent = fmt(dEarth);
+  document.getElementById('s-moon').textContent  = fmt(dMoon);
+
+  if (useMetric) {
+    const speedKmh = Math.round(speed * MI_TO_KM);
+    document.getElementById('s-speed').textContent = speedKmh.toLocaleString();
+    document.getElementById('s-kps').textContent   = (speedKmh / 3600).toFixed(2);
+  } else {
+    document.getElementById('s-speed').textContent = speed.toLocaleString();
+    document.getElementById('s-mps').textContent   = (speed / 3600).toFixed(1);
+  }
 
   const pctToMoon = Math.min(99, Math.round((dEarth / TOTAL_TO_MOON) * 100));
   document.getElementById('s-pct').textContent = pctToMoon + '%';
-  document.getElementById('denier-distance').textContent = dMoon.toLocaleString();
+  document.getElementById('denier-distance').textContent = fmt(dMoon);
 
   const missionTotal = SPLASH - LAUNCH;
   const missionElap  = now - LAUNCH;
   const mPct = Math.min(98, Math.round((missionElap / missionTotal) * 100));
   document.getElementById('mission-prog').style.width = mPct + '%';
-  document.getElementById('traj-pct').textContent = `${dEarth.toLocaleString()} mi from Earth`;
+
+  const distLabel = useMetric
+    ? `${Math.round(dEarth * MI_TO_KM).toLocaleString()} km from Earth`
+    : `${dEarth.toLocaleString()} mi from Earth`;
+  document.getElementById('traj-pct').textContent = distLabel;
 }
 
 function drawTrajectory() {
