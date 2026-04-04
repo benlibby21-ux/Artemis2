@@ -298,15 +298,21 @@ h1 span { color: var(--accent); }
   align-items: center;
   gap: 10px;
 }
-.crew-init {
-  width: 36px; height: 36px;
+.crew-photo {
+  width: 52px; height: 52px;
   border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 700;
+  object-fit: cover;
+  object-position: center top;
   flex-shrink: 0;
-  letter-spacing: 0.05em;
+  border: 2px solid transparent;
+}
+.crew-photo-wrap {
+  width: 52px; height: 52px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  overflow: hidden;
+  position: relative;
+  display: flex; align-items: center; justify-content: center;
 }
 .crew-name { font-size: 12px; font-weight: 600; color: #fff; line-height: 1.2; }
 .crew-role { font-size: 10px; color: var(--muted); margin-top: 2px; }
@@ -646,7 +652,13 @@ footer a { color: var(--accent); text-decoration: none; }
   <div class="section-header">Crew Aboard Orion "Integrity"</div>
   <div class="crew-grid">
     <div class="crew-card">
-      <div class="crew-init" style="background:rgba(77,168,255,0.15);border:1px solid rgba(77,168,255,0.3);color:var(--accent)">RW</div>
+      <div class="crew-photo-wrap" style="border:2px solid rgba(77,168,255,0.5)">
+        <img class="crew-photo" 
+          src="https://www.nasa.gov/wp-content/uploads/2023/03/wiseman_reid_portrait.jpg"
+          onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
+          alt="Reid Wiseman">
+        <div class="crew-init" style="display:none;background:rgba(77,168,255,0.15);color:var(--accent);width:100%;height:100%;border-radius:50%;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:0.05em;align-items:center;justify-content:center">RW</div>
+      </div>
       <div>
         <div class="crew-name">Reid Wiseman</div>
         <div class="crew-role">Commander</div>
@@ -654,7 +666,13 @@ footer a { color: var(--accent); text-decoration: none; }
       </div>
     </div>
     <div class="crew-card">
-      <div class="crew-init" style="background:rgba(0,229,192,0.1);border:1px solid rgba(0,229,192,0.25);color:var(--accent2)">VG</div>
+      <div class="crew-photo-wrap" style="border:2px solid rgba(0,229,192,0.5)">
+        <img class="crew-photo"
+          src="https://www.nasa.gov/wp-content/uploads/2023/03/glover_victor_portrait.jpg"
+          onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
+          alt="Victor Glover">
+        <div class="crew-init" style="display:none;background:rgba(0,229,192,0.1);color:var(--accent2);width:100%;height:100%;border-radius:50%;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:0.05em;align-items:center;justify-content:center">VG</div>
+      </div>
       <div>
         <div class="crew-name">Victor Glover</div>
         <div class="crew-role">Pilot</div>
@@ -662,7 +680,13 @@ footer a { color: var(--accent); text-decoration: none; }
       </div>
     </div>
     <div class="crew-card">
-      <div class="crew-init" style="background:rgba(245,166,35,0.1);border:1px solid rgba(245,166,35,0.25);color:var(--gold)">CK</div>
+      <div class="crew-photo-wrap" style="border:2px solid rgba(245,166,35,0.5)">
+        <img class="crew-photo"
+          src="https://www.nasa.gov/wp-content/uploads/2023/03/koch_christina_portrait.jpg"
+          onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
+          alt="Christina Koch">
+        <div class="crew-init" style="display:none;background:rgba(245,166,35,0.1);color:var(--gold);width:100%;height:100%;border-radius:50%;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:0.05em;align-items:center;justify-content:center">CK</div>
+      </div>
       <div>
         <div class="crew-name">Christina Koch</div>
         <div class="crew-role">Mission Specialist</div>
@@ -670,7 +694,13 @@ footer a { color: var(--accent); text-decoration: none; }
       </div>
     </div>
     <div class="crew-card">
-      <div class="crew-init" style="background:rgba(180,150,255,0.1);border:1px solid rgba(180,150,255,0.25);color:#b49cff">JH</div>
+      <div class="crew-photo-wrap" style="border:2px solid rgba(180,150,255,0.5)">
+        <img class="crew-photo"
+          src="https://www.nasa.gov/wp-content/uploads/2023/03/hansen_jeremy_portrait.jpg"
+          onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
+          alt="Jeremy Hansen">
+        <div class="crew-init" style="display:none;background:rgba(180,150,255,0.1);color:#b49cff;width:100%;height:100%;border-radius:50%;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:0.05em;align-items:center;justify-content:center">JH</div>
+      </div>
       <div>
         <div class="crew-name">Jeremy Hansen</div>
         <div class="crew-role">Mission Specialist</div>
