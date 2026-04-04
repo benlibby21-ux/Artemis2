@@ -680,31 +680,11 @@ footer a { color: var(--accent); text-decoration: none; }
 </div>
 
 <!-- TODAY'S ACTIVITIES -->
-<div class="section">
-  <div class="section-header">Day 3 Activities (Today · Apr 3 · CST)</div>
-  <div class="today-items">
-    <div class="today-item">
-      <div class="today-time">12:00 CST</div>
-      <div class="today-desc">Crew wake-up · system checks · public affairs event</div>
-    </div>
-    <div class="today-item">
-      <div class="today-time">Midday</div>
-      <div class="today-desc">CPR &amp; emergency medical procedure demonstration in microgravity</div>
-    </div>
-    <div class="today-item">
-      <div class="today-time">Ongoing</div>
-      <div class="today-desc">Configuring cabin for lunar flyby photography · 80–400mm &amp; 14–24mm lens setup</div>
-    </div>
-    <div class="today-item">
-      <div class="today-time">17:00 CST</div>
-      <div class="today-desc">Koch tests Deep Space Network emergency comms system</div>
-    </div>
-    <div class="today-item">
-      <div class="today-time">17:49 CST</div>
-      <div class="today-desc">First OTC burn (~8 sec) · fine-tuning trajectory to Moon</div>
-    </div>
-  </div>
+<div class="section" id="activities-section">
+  <div class="section-header" id="activities-header">Activities</div>
+  <div class="today-items" id="activities-list"></div>
 </div>
+
 
 <!-- CREW -->
 <div class="section">
@@ -964,6 +944,176 @@ updateClock();
 drawTrajectory();
 setInterval(updateClock, 1000);
 setInterval(drawTrajectory, 10000);
+
+// ===== DYNAMIC ACTIVITIES =====
+// Each entry: { utc: ISO string or null, label: display time string, desc, status }
+// status: 'done' | 'cancelled' | 'upcoming' | 'active'
+// If utc is set, status auto-upgrades to 'done' once that time passes.
+// If utc is null, status is fixed.
+
+const MISSION_DAYS = [
+  {
+    day: 1, date: 'Apr 1',
+    events: [
+      { utc: '2026-04-01T23:35:00Z', label: '18:35 CST', desc: 'Launch · SLS lifts off from LC-39B' },
+      { utc: '2026-04-02T01:00:00Z', label: '~20:00 CST', desc: 'Solar array deployment · Orion power-positive' },
+      { utc: '2026-04-02T02:00:00Z', label: '~21:00 CST', desc: 'Proximity ops demo with ICPS upper stage' },
+      { utc: '2026-04-02T04:30:00Z', label: '~23:30 CST', desc: 'Apogee raise burn complete' },
+    ]
+  },
+  {
+    day: 2, date: 'Apr 2',
+    events: [
+      { utc: '2026-04-02T12:06:00Z', label: '07:06 CST', desc: 'Crew wake-up · perigee raise burn prep' },
+      { utc: '2026-04-02T14:00:00Z', label: '09:00 CST', desc: 'Perigee raise burn complete · orbit refined' },
+      { utc: '2026-04-03T00:49:00Z', label: '19:49 CST', desc: 'Translunar injection burn · 5 min 50 sec · crew bound for Moon' },
+      { utc: '2026-04-03T01:30:00Z', label: '20:30 CST', desc: 'TLI confirmed · first humans beyond Earth orbit since 1972' },
+    ]
+  },
+  {
+    day: 3, date: 'Apr 3',
+    events: [
+      { utc: '2026-04-03T18:00:00Z', label: '13:00 CST', desc: 'Crew wake-up · deep space ops begin' },
+      { utc: '2026-04-03T19:30:00Z', label: '14:30 CST', desc: 'CPR & emergency medical procedure demo in microgravity' },
+      { utc: '2026-04-03T19:30:00Z', label: '~14:30 CST', desc: 'Cabin configured for lunar flyby photography · 80–400mm & 14–24mm lenses' },
+      { utc: '2026-04-03T22:00:00Z', label: '17:00 CST', desc: 'Koch tests Deep Space Network emergency comms system' },
+      { utc: null, label: 'Cancelled', desc: 'First OTC burn (~8 sec) — cancelled; trajectory nominal without it', status: 'cancelled' },
+      { utc: '2026-04-04T08:00:00Z', label: '~03:00 CST', desc: 'Crew sleep period begins' },
+    ]
+  },
+  {
+    day: 4, date: 'Apr 4',
+    events: [
+      { utc: '2026-04-04T16:35:00Z', label: '11:35 CST', desc: 'Crew wake-up for Flight Day 4' },
+      { utc: '2026-04-04T18:00:00Z', label: '~13:00 CST', desc: 'Exercise sessions · flywheel device cardiovascular conditioning' },
+      { utc: '2026-04-04T19:00:00Z', label: '~14:00 CST', desc: 'Lunar observation rehearsal · crew practices flyby photography choreography' },
+      { utc: '2026-04-04T21:00:00Z', label: '~16:00 CST', desc: 'Science operations · AVATAR organ-on-chip experiment checks' },
+      { utc: '2026-04-05T08:00:00Z', label: '~03:00 CST', desc: 'Crew sleep period begins' },
+    ]
+  },
+  {
+    day: 5, date: 'Apr 5',
+    events: [
+      { utc: '2026-04-05T16:00:00Z', label: '~11:00 CST', desc: 'Crew wake-up · Orion enters lunar sphere of influence' },
+      { utc: '2026-04-05T18:00:00Z', label: '~13:00 CST', desc: 'Final lunar flyby prep · camera positioning & window assignments' },
+      { utc: '2026-04-05T20:00:00Z', label: '~15:00 CST', desc: 'Mission status briefing · NASA Johnson' },
+      { utc: '2026-04-06T08:00:00Z', label: '~03:00 CST', desc: 'Crew sleep period begins' },
+    ]
+  },
+  {
+    day: 6, date: 'Apr 6',
+    events: [
+      { utc: '2026-04-06T15:00:00Z', label: '~10:00 CST', desc: 'Crew wake-up · lunar flyby day begins' },
+      { utc: '2026-04-06T17:00:00Z', label: '~12:00 CST', desc: 'Closest approach to Moon · ~4,700 mi beyond far side' },
+      { utc: '2026-04-06T18:00:00Z', label: '~13:00 CST', desc: 'Solar eclipse from Orion · Sun hidden behind Moon for ~1 hour' },
+      { utc: '2026-04-06T19:00:00Z', label: '~14:00 CST', desc: 'Meteoroid flash & dust lofting observations · far side photography' },
+      { utc: '2026-04-06T21:00:00Z', label: '~16:00 CST', desc: 'Record broken · farthest humans from Earth (252,799 mi)' },
+      { utc: '2026-04-06T23:00:00Z', label: '~18:00 CST', desc: 'Return trajectory burn 1 · heading home' },
+    ]
+  },
+  {
+    day: 7, date: 'Apr 7',
+    events: [
+      { utc: '2026-04-07T16:00:00Z', label: '~11:00 CST', desc: 'Crew wake-up · Orion exits lunar sphere of influence' },
+      { utc: '2026-04-07T18:00:00Z', label: '~13:00 CST', desc: 'Debrief with lunar science team · fresh impressions of the flyby' },
+      { utc: '2026-04-07T22:00:00Z', label: '~17:00 CST', desc: 'Return trajectory correction burn 2' },
+    ]
+  },
+  {
+    day: 8, date: 'Apr 8',
+    events: [
+      { utc: '2026-04-08T16:00:00Z', label: '~11:00 CST', desc: 'Crew wake-up · reentry prep begins' },
+      { utc: '2026-04-08T18:00:00Z', label: '~13:00 CST', desc: 'Solar flare shelter drill · crew builds radiation protection using Orion supplies' },
+      { utc: '2026-04-08T20:00:00Z', label: '~15:00 CST', desc: 'Manual attitude control demo · crew flies Orion by hand' },
+    ]
+  },
+  {
+    day: 9, date: 'Apr 9',
+    events: [
+      { utc: '2026-04-09T16:00:00Z', label: '~11:00 CST', desc: 'Crew wake-up · final systems checks' },
+      { utc: '2026-04-09T20:00:00Z', label: '~15:00 CST', desc: 'Return trajectory correction burn 3 · final reentry alignment' },
+      { utc: '2026-04-09T22:00:00Z', label: '~17:00 CST', desc: 'Crew prepares suits & seats for reentry' },
+    ]
+  },
+  {
+    day: 10, date: 'Apr 10',
+    events: [
+      { utc: '2026-04-10T20:00:00Z', label: '~15:00 CST', desc: 'Orion reentry · ~25,000 mph · heat shield glows at 5,000°F' },
+      { utc: '2026-04-10T20:30:00Z', label: '~15:30 CST', desc: 'Parachute deploy · drogue & mains' },
+      { utc: '2026-04-10T23:21:00Z', label: '18:21 CST', desc: 'Splashdown · Pacific Ocean near San Diego 🎉' },
+    ]
+  },
+];
+
+function getMissionDay(nowMs) {
+  // Day 1 = launch day Apr 1
+  const launchMidnight = new Date('2026-04-01T00:00:00-05:00').getTime(); // CST midnight Apr 1
+  const dayMs = 86400000;
+  return Math.floor((nowMs - launchMidnight) / dayMs) + 1;
+}
+
+function renderActivities() {
+  const now = Date.now();
+  const missionDay = Math.max(1, Math.min(10, getMissionDay(now)));
+
+  // Show today's day, and also show yesterday's if we're early in the day (before noon CST)
+  const noonCSTtoday = new Date();
+  noonCSTtoday.setUTCHours(17, 0, 0, 0); // noon CST = 17:00 UTC
+
+  // Find today's block
+  const todayBlock = MISSION_DAYS.find(d => d.day === missionDay);
+  if (!todayBlock) return;
+
+  document.getElementById('activities-header').textContent =
+    `Day ${missionDay} Activities · ${todayBlock.date} · CST`;
+
+  const list = document.getElementById('activities-list');
+  list.innerHTML = '';
+
+  todayBlock.events.forEach(ev => {
+    const item = document.createElement('div');
+    item.className = 'today-item';
+
+    const timeDiv = document.createElement('div');
+    timeDiv.className = 'today-time';
+
+    const descDiv = document.createElement('div');
+    descDiv.className = 'today-desc';
+    descDiv.textContent = ev.desc;
+
+    // Determine status
+    let status = ev.status || 'upcoming';
+    if (ev.utc && !ev.status) {
+      const evTime = new Date(ev.utc).getTime();
+      if (now >= evTime) status = 'done';
+      else if (now >= evTime - 15 * 60000) status = 'active'; // within 15 min = active
+    }
+
+    if (status === 'done') {
+      timeDiv.textContent = '✓ Done';
+      timeDiv.style.color = 'var(--accent2)';
+      descDiv.style.color = 'var(--muted)';
+    } else if (status === 'cancelled') {
+      timeDiv.textContent = 'Cancelled';
+      timeDiv.style.color = '#ff6b6b';
+      descDiv.style.color = 'var(--muted)';
+    } else if (status === 'active') {
+      timeDiv.textContent = '▶ Now';
+      timeDiv.style.color = 'var(--gold)';
+      timeDiv.style.animation = 'blink 1.4s ease-in-out infinite';
+    } else {
+      timeDiv.textContent = ev.label;
+    }
+
+    item.appendChild(timeDiv);
+    item.appendChild(descDiv);
+    list.appendChild(item);
+  });
+}
+
+renderActivities();
+setInterval(renderActivities, 60000); // refresh every minute
+
 </script>
 </body>
 </html>
