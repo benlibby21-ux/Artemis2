@@ -196,6 +196,8 @@ h1 span { color: var(--accent); }
 }
 
 /* ===== PROGRESS SECTION ===== */
+@keyframes loading-pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+.badge-loading { animation: loading-pulse 1.6s ease-in-out infinite; }
 .section {
   margin: 0 16px 14px;
   background: var(--bg2);
@@ -447,7 +449,21 @@ footer a { color: var(--accent); text-decoration: none; }
 <!-- DISTANCE/SPEED STATS -->
 <div style="display:flex;justify-content:space-between;align-items:center;padding:0 16px;margin-bottom:6px;">
   <div style="font-family:var(--cond);font-size:10px;letter-spacing:0.12em;color:var(--muted);text-transform:uppercase;">Live Telemetry</div>
-  <div id="telemetry-source" style="font-family:var(--mono);font-size:10px;color:var(--muted);">Loading…</div>
+  <div style="display:flex;align-items:center;gap:8px;">
+    <div id="telemetry-source" style="font-family:var(--mono);font-size:10px;color:var(--muted);">◌ Est · fetching live data…</div>
+    <button id="refresh-btn" onclick="manualRefresh()" title="Fetch live telemetry" style="
+      background:rgba(77,168,255,0.1);
+      border:1px solid rgba(77,168,255,0.25);
+      border-radius:6px;
+      color:var(--accent);
+      font-family:var(--mono);
+      font-size:10px;
+      padding:3px 8px;
+      cursor:pointer;
+      line-height:1;
+      transition:background 0.15s, border-color 0.15s;
+    ">↻</button>
+  </div>
 </div>
 <div class="stat-grid">
   <div class="stat-card">
@@ -831,16 +847,23 @@ async function fetchHorizons() {
 }
 
 async function refreshLiveTelemetry() {
+  // Show estimated values immediately while fetch is in flight
+  const badge = document.getElementById('telemetry-source');
+  if (!liveTelemetry && badge) {
+    badge.textContent = '◌ Est · fetching live data…';
+    badge.style.color = 'var(--muted)';
+    badge.classList.add('badge-loading');
+  }
+
   try {
     liveTelemetry = await fetchHorizons();
-    const badge = document.getElementById('telemetry-source');
     if (badge) {
       badge.textContent = '● LIVE · JPL Horizons (Orion + Moon vectors)';
       badge.style.color = 'var(--accent2)';
+      badge.classList.remove('badge-loading');
     }
   } catch(e) {
     console.warn('Horizons fetch failed:', e.message);
-    // Try Orion-only fallback
     try {
       const orion = await fetchHorizonsVector('-1024');
       const dEarthKm = Math.sqrt(orion.x**2 + orion.y**2 + orion.z**2);
@@ -850,20 +873,21 @@ async function refreshLiveTelemetry() {
         dEarthMi,
         dMoonMi: Math.max(4700, TOTAL_TO_MOON - dEarthMi),
         speedMph: speedKms * 3600 * KM_TO_MI,
+        speedKms,
         fetchedAt: Date.now(),
         source: 'orion-only'
       };
-      const badge = document.getElementById('telemetry-source');
       if (badge) {
         badge.textContent = '◑ LIVE · Orion only · Moon est.';
         badge.style.color = 'var(--gold)';
+        badge.classList.remove('badge-loading');
       }
     } catch(e2) {
       console.warn('Orion-only fallback also failed:', e2.message);
-      const badge = document.getElementById('telemetry-source');
       if (badge) {
-        badge.textContent = '○ Est · anchor 1:32 PM CST Apr 4';
+        badge.textContent = '○ Est · dead-reckoned from Apr 4 anchor';
         badge.style.color = 'var(--muted)';
+        badge.classList.remove('badge-loading');
       }
     }
   }
@@ -1021,6 +1045,24 @@ function drawTrajectory() {
   document.getElementById('traj-dot').setAttribute('cy', oy.toFixed(1));
   document.getElementById('traj-glow').setAttribute('cx', ox.toFixed(1));
   document.getElementById('traj-glow').setAttribute('cy', oy.toFixed(1));
+}
+
+// Manual refresh — disables button during fetch to prevent hammering
+async function manualRefresh() {
+  const btn = document.getElementById('refresh-btn');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '…';
+    btn.style.opacity = '0.5';
+    btn.style.cursor = 'default';
+  }
+  await refreshLiveTelemetry();
+  if (btn) {
+    btn.disabled = false;
+    btn.textContent = '↻';
+    btn.style.opacity = '1';
+    btn.style.cursor = 'pointer';
+  }
 }
 
 // Kick off live telemetry — fetch immediately, then every 2 minutes
