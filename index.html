@@ -456,14 +456,14 @@ footer a { color: var(--accent); text-decoration: none; }
     <div class="stat-unit"><span class="unit-mi">miles</span><span class="unit-km" style="display:none">km</span></div>
   </div>
   <div class="stat-card green">
-    <div class="stat-label">From Moon</div>
+    <div class="stat-label">To Flyby Point</div>
     <div class="stat-val" id="s-moon">—</div>
     <div class="stat-unit"><span class="unit-mi">miles</span><span class="unit-km" style="display:none">km</span></div>
   </div>
   <div class="stat-card gold">
     <div class="stat-label">Speed</div>
     <div class="stat-val" id="s-speed">—</div>
-    <div class="stat-unit"><span class="unit-mi">mph · ~<span id="s-mps">—</span> mi/s</span><span class="unit-km" style="display:none">km/h · ~<span id="s-kps">—</span> km/s</span></div>
+    <div class="stat-unit"><span class="unit-mi">mph · <span id="s-kms-raw" style="color:var(--muted)"></span></span><span class="unit-km" style="display:none">km/h · ~<span id="s-kps">—</span> km/s</span></div>
   </div>
   <div class="stat-card red">
     <div class="stat-label">% to Moon</div>
@@ -698,7 +698,7 @@ footer a { color: var(--accent); text-decoration: none; }
 
 <footer>
   <div>Data: NASA AROW · nasa.gov/artemis-ii</div>
-  <div style="margin-top:4px;">Telemetry: JPL Horizons API (live) · fallback anchor <span class="unit-mi">173,216 mi</span><span class="unit-km" style="display:none">278,770 km</span> · 1:26 PM CST Apr 4</div>
+  <div style="margin-top:4px;">Telemetry: JPL Horizons API · Orion (<code>-1024</code>) live vectors · Moon (<code>301</code>) position fetched once at flyby time (Apr 6 17:00 UTC) · "To Flyby Point" counts to zero at closest approach · Earth-centered ecliptic J2000</div>
   <div style="margin-top:8px;">
     <a href="https://www.nasa.gov/missions/artemis/artemis-2/track-nasas-artemis-ii-mission-in-real-time/" target="_blank">NASA AROW Live Tracker ↗</a>
     &nbsp;·&nbsp;
@@ -732,17 +732,36 @@ const DECEL_RATE   = 3.5;
 function pad(n,w=2){return String(Math.floor(n)).padStart(w,'0');}
 
 // ===== LIVE TELEMETRY via JPL Horizons =====
-// Spacecraft ID -1024 = Artemis II / Orion "Integrity"
-// Routed through allorigins.win to bypass browser CORS restriction
-async function fetchHorizons() {
-  const now = new Date();
-  const start = new Date(now.getTime() - 6 * 60000);
-  const stop  = new Date(now.getTime() + 6 * 60000);
+// Orion ID: -1024  |  Moon ID: 301  |  Frame: Earth-centered ecliptic J2000 (500@399)
+//
+// "Distance to Moon" = distance from Orion's LIVE position to the point in space
+// where the Moon WILL BE at closest approach (Apr 6 ~17:00 UTC).
+// This counts down to zero as Orion reaches the flyby point.
+//
+// Moon position is fetched ONCE for the flyby timestamp and cached.
+// Orion position is fetched live every 2 minutes.
+
+const FLYBY_UTC = '2026-04-06T17:00:00Z'; // closest approach timestamp
+
+let moonFlybyPos = null; // { x, y, z } km — Moon's position at flyby, cached after first fetch
+
+async function fetchHorizonsVector(commandId, atTime) {
+  // atTime: ISO string for the exact moment to query (defaults to now ±6min window)
+  let start, stop;
+  if (atTime) {
+    const t = new Date(atTime).getTime();
+    start = new Date(t - 3 * 60000);  // ±3 min window around fixed time
+    stop  = new Date(t + 3 * 60000);
+  } else {
+    const now = Date.now();
+    start = new Date(now - 6 * 60000);
+    stop  = new Date(now + 6 * 60000);
+  }
   const fmt = d => d.toISOString().slice(0, 16);
 
   const horizonsParams = new URLSearchParams({
     format: 'json',
-    COMMAND: "'-1024'",
+    COMMAND: `'${commandId}'`,
     OBJ_DATA: "'NO'",
     MAKE_EPHEM: "'YES'",
     EPHEM_TYPE: "'VECTORS'",
@@ -752,13 +771,12 @@ async function fetchHorizons() {
     STEP_SIZE: "'10m'",
     VEC_TABLE: "'2'",
     OUT_UNITS: "'KM-S'",
-    REF_PLANE: "'ECLIPTIC'",
+    REF_PLANE: "'FRAME'",
     VEC_LABELS: "'NO'",
     CSV_FORMAT: "'YES'",
   });
 
   const horizonsUrl = `https://ssd.jpl.nasa.gov/api/horizons.api?${horizonsParams}`;
-  // Use allorigins proxy to bypass CORS
   const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(horizonsUrl)}`;
 
   const res = await fetch(proxyUrl);
@@ -768,7 +786,7 @@ async function fetchHorizons() {
   const raw = data.result;
   const soeIdx = raw.indexOf('$$SOE');
   const eoeIdx = raw.indexOf('$$EOE');
-  if (soeIdx === -1) throw new Error('No SOE marker in Horizons response');
+  if (soeIdx === -1) throw new Error(`No SOE marker for COMMAND=${commandId}`);
 
   const block = raw.slice(soeIdx + 6, eoeIdx).trim();
   const lines = block.split('\n').filter(l => l.trim() && !l.trim().startsWith('*'));
@@ -782,15 +800,57 @@ async function fetchHorizons() {
   const vy = parseFloat(row[6]);
   const vz = parseFloat(row[7]);
 
-  if ([x,y,z,vx,vy,vz].some(isNaN)) throw new Error('NaN in parsed vectors');
+  if ([x,y,z,vx,vy,vz].some(isNaN)) throw new Error(`NaN in vectors for COMMAND=${commandId}`);
+  return { x, y, z, vx, vy, vz };
+}
 
-  const dEarthKm = Math.sqrt(x*x + y*y + z*z);
-  const speedKms  = Math.sqrt(vx*vx + vy*vy + vz*vz);
-  const dEarthMi  = dEarthKm * KM_TO_MI;
-  const speedMph   = speedKms * 3600 * KM_TO_MI;
-  const dMoonMi    = Math.max(4700, TOTAL_TO_MOON - dEarthMi);
+async function fetchHorizons() {
+  // 1. Fetch Moon's position at flyby time (once, then cache forever)
+  if (!moonFlybyPos) {
+    try {
+      const moon = await fetchHorizonsVector('301', FLYBY_UTC);
+      moonFlybyPos = { x: moon.x, y: moon.y, z: moon.z };
+      console.log('🌕 Moon flyby position cached:', moonFlybyPos);
+    } catch(e) {
+      console.warn('Moon flyby fetch failed — will retry next cycle:', e.message);
+      // Don't throw; we'll try again on next interval
+    }
+  }
 
-  return { dEarthMi, dMoonMi, speedMph, fetchedAt: Date.now() };
+  // 2. Fetch Orion's current position
+  const orion = await fetchHorizonsVector('-1024');
+
+  // 3. Distance from Earth
+  const dEarthKm = Math.sqrt(orion.x**2 + orion.y**2 + orion.z**2);
+
+  // 4. Distance to flyby point (or fall back to simple Earth-Moon line if not cached yet)
+  let dMoonKm;
+  if (moonFlybyPos) {
+    const dx = orion.x - moonFlybyPos.x;
+    const dy = orion.y - moonFlybyPos.y;
+    const dz = orion.z - moonFlybyPos.z;
+    dMoonKm = Math.sqrt(dx**2 + dy**2 + dz**2);
+  } else {
+    // Fallback: approximate from Earth distance
+    const moonEarthDistKm = 384400;
+    dMoonKm = Math.max(0, moonEarthDistKm - dEarthKm);
+  }
+
+  // 5. Speed
+  const speedKms = Math.sqrt(orion.vx**2 + orion.vy**2 + orion.vz**2);
+
+  const dEarthMi = dEarthKm * KM_TO_MI;
+  const dMoonMi  = Math.max(0, dMoonKm * KM_TO_MI);
+  const speedMph = speedKms * 3600 * KM_TO_MI;
+
+  return {
+    dEarthMi,
+    dMoonMi,
+    speedMph,
+    speedKms,
+    fetchedAt: Date.now(),
+    source: moonFlybyPos ? 'live-flyby' : 'live-approx'
+  };
 }
 
 async function refreshLiveTelemetry() {
@@ -798,15 +858,39 @@ async function refreshLiveTelemetry() {
     liveTelemetry = await fetchHorizons();
     const badge = document.getElementById('telemetry-source');
     if (badge) {
-      badge.textContent = '● LIVE · JPL Horizons';
+      const label = liveTelemetry.source === 'live-flyby'
+        ? '● LIVE · JPL Horizons · dist to flyby point'
+        : '◑ LIVE · JPL Horizons · flyby pos pending';
+      badge.textContent = label;
       badge.style.color = 'var(--accent2)';
     }
   } catch(e) {
     console.warn('Horizons fetch failed:', e.message);
-    const badge = document.getElementById('telemetry-source');
-    if (badge) {
-      badge.textContent = '○ Est · anchor 1:32 PM CST';
-      badge.style.color = 'var(--muted)';
+    // Try Orion-only fallback
+    try {
+      const orion = await fetchHorizonsVector('-1024');
+      const dEarthKm = Math.sqrt(orion.x**2 + orion.y**2 + orion.z**2);
+      const speedKms = Math.sqrt(orion.vx**2 + orion.vy**2 + orion.vz**2);
+      const dEarthMi = dEarthKm * KM_TO_MI;
+      liveTelemetry = {
+        dEarthMi,
+        dMoonMi: Math.max(4700, TOTAL_TO_MOON - dEarthMi),
+        speedMph: speedKms * 3600 * KM_TO_MI,
+        fetchedAt: Date.now(),
+        source: 'orion-only'
+      };
+      const badge = document.getElementById('telemetry-source');
+      if (badge) {
+        badge.textContent = '◑ LIVE · Orion only · Moon est.';
+        badge.style.color = 'var(--gold)';
+      }
+    } catch(e2) {
+      console.warn('Orion-only fallback also failed:', e2.message);
+      const badge = document.getElementById('telemetry-source');
+      if (badge) {
+        badge.textContent = '○ Est · anchor 1:32 PM CST Apr 4';
+        badge.style.color = 'var(--muted)';
+      }
     }
   }
 }
@@ -823,8 +907,10 @@ function calcOrion() {
   const clampedH = liveTelemetry ? elapsedH : Math.min(elapsedH, 0.5);
   const speed  = Math.max(1200, src.speedMph - clampedH * DECEL_RATE);
   const dEarth = Math.round(src.dEarthMi + speed * elapsedH);
-  const dMoon  = Math.max(4700, Math.round(src.dMoonMi  - speed * elapsedH));
-  return { dEarth, dMoon, speed: Math.round(speed) };
+  const dMoon  = Math.max(0, Math.round(src.dMoonMi  - speed * elapsedH));
+  // Pass raw km/s through for display (only available from live fetch, not dead-reckoned)
+  const speedKms = src.speedKms || null;
+  return { dEarth, dMoon, speed: Math.round(speed), speedKms };
 }
 
 function updateBanner() {
@@ -898,7 +984,7 @@ function updateClock() {
   const rm = Math.floor((rem % 3600000) / 60000);
   document.getElementById('countdown').textContent = `${rd}d ${pad(rh)}h ${pad(rm)}m`;
 
-  const { dEarth, dMoon, speed } = calcOrion();
+  const { dEarth, dMoon, speed, speedKms } = calcOrion();
   document.getElementById('s-earth').textContent = fmt(dEarth);
   document.getElementById('s-moon').textContent  = fmt(dMoon);
 
@@ -908,7 +994,11 @@ function updateClock() {
     document.getElementById('s-kps').textContent   = (speedKmh / 3600).toFixed(2);
   } else {
     document.getElementById('s-speed').textContent = speed.toLocaleString();
-    document.getElementById('s-mps').textContent   = (speed / 3600).toFixed(1);
+    // Show raw km/s from Horizons if available (for cross-referencing with AROW)
+    const rawEl = document.getElementById('s-kms-raw');
+    if (rawEl) {
+      rawEl.textContent = speedKms ? `${speedKms.toFixed(3)} km/s` : `~${(speed / 3600 * MI_TO_KM).toFixed(2)} km/s`;
+    }
   }
 
   const pctToMoon = Math.min(99, Math.round((dEarth / TOTAL_TO_MOON) * 100));
