@@ -456,7 +456,7 @@ footer a { color: var(--accent); text-decoration: none; }
     <div class="stat-unit"><span class="unit-mi">miles</span><span class="unit-km" style="display:none">km</span></div>
   </div>
   <div class="stat-card green">
-    <div class="stat-label">To Flyby Point</div>
+    <div class="stat-label">From Moon</div>
     <div class="stat-val" id="s-moon">—</div>
     <div class="stat-unit"><span class="unit-mi">miles</span><span class="unit-km" style="display:none">km</span></div>
   </div>
@@ -698,7 +698,7 @@ footer a { color: var(--accent); text-decoration: none; }
 
 <footer>
   <div>Data: NASA AROW · nasa.gov/artemis-ii</div>
-  <div style="margin-top:4px;">Telemetry: JPL Horizons API · Orion (<code>-1024</code>) live vectors · Moon (<code>301</code>) position fetched once at flyby time (Apr 6 17:00 UTC) · "To Flyby Point" counts to zero at closest approach · Earth-centered ecliptic J2000</div>
+  <div style="margin-top:4px;">Telemetry: JPL Horizons API · Orion (<code>-1024</code>) + Moon (<code>301</code>) state vectors · Earth Mean Equatorial frame (EME2000) · updated every 2 min</div>
   <div style="margin-top:8px;">
     <a href="https://www.nasa.gov/missions/artemis/artemis-2/track-nasas-artemis-ii-mission-in-real-time/" target="_blank">NASA AROW Live Tracker ↗</a>
     &nbsp;·&nbsp;
@@ -805,52 +805,29 @@ async function fetchHorizonsVector(commandId, atTime) {
 }
 
 async function fetchHorizons() {
-  // 1. Fetch Moon's position at flyby time (once, then cache forever)
-  if (!moonFlybyPos) {
-    try {
-      const moon = await fetchHorizonsVector('301', FLYBY_UTC);
-      moonFlybyPos = { x: moon.x, y: moon.y, z: moon.z };
-      console.log('🌕 Moon flyby position cached:', moonFlybyPos);
-    } catch(e) {
-      console.warn('Moon flyby fetch failed — will retry next cycle:', e.message);
-      // Don't throw; we'll try again on next interval
-    }
-  }
+  // Fetch Orion and Moon in parallel — both at current time, relative to Earth center
+  const [orion, moon] = await Promise.all([
+    fetchHorizonsVector('-1024'),   // Artemis II / Orion "Integrity"
+    fetchHorizonsVector('301'),     // Earth's Moon (current position)
+  ]);
 
-  // 2. Fetch Orion's current position
-  const orion = await fetchHorizonsVector('-1024');
-
-  // 3. Distance from Earth
+  // Distance from Earth
   const dEarthKm = Math.sqrt(orion.x**2 + orion.y**2 + orion.z**2);
 
-  // 4. Distance to flyby point (or fall back to simple Earth-Moon line if not cached yet)
-  let dMoonKm;
-  if (moonFlybyPos) {
-    const dx = orion.x - moonFlybyPos.x;
-    const dy = orion.y - moonFlybyPos.y;
-    const dz = orion.z - moonFlybyPos.z;
-    dMoonKm = Math.sqrt(dx**2 + dy**2 + dz**2);
-  } else {
-    // Fallback: approximate from Earth distance
-    const moonEarthDistKm = 384400;
-    dMoonKm = Math.max(0, moonEarthDistKm - dEarthKm);
-  }
+  // True distance from Moon (magnitude of Orion−Moon vector)
+  const dx = orion.x - moon.x;
+  const dy = orion.y - moon.y;
+  const dz = orion.z - moon.z;
+  const dMoonKm = Math.sqrt(dx**2 + dy**2 + dz**2);
 
-  // 5. Speed
+  // Speed
   const speedKms = Math.sqrt(orion.vx**2 + orion.vy**2 + orion.vz**2);
 
   const dEarthMi = dEarthKm * KM_TO_MI;
   const dMoonMi  = Math.max(0, dMoonKm * KM_TO_MI);
   const speedMph = speedKms * 3600 * KM_TO_MI;
 
-  return {
-    dEarthMi,
-    dMoonMi,
-    speedMph,
-    speedKms,
-    fetchedAt: Date.now(),
-    source: moonFlybyPos ? 'live-flyby' : 'live-approx'
-  };
+  return { dEarthMi, dMoonMi, speedMph, speedKms, fetchedAt: Date.now(), source: 'live' };
 }
 
 async function refreshLiveTelemetry() {
@@ -858,10 +835,7 @@ async function refreshLiveTelemetry() {
     liveTelemetry = await fetchHorizons();
     const badge = document.getElementById('telemetry-source');
     if (badge) {
-      const label = liveTelemetry.source === 'live-flyby'
-        ? '● LIVE · JPL Horizons · dist to flyby point'
-        : '◑ LIVE · JPL Horizons · flyby pos pending';
-      badge.textContent = label;
+      badge.textContent = '● LIVE · JPL Horizons (Orion + Moon vectors)';
       badge.style.color = 'var(--accent2)';
     }
   } catch(e) {
