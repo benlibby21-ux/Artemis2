@@ -562,6 +562,74 @@ footer a { color: var(--accent); text-decoration: none; }
   </div>
 </div>
 
+<!-- NASA LIVE FEED -->
+<div class="section" style="padding:0;overflow:hidden;">
+  <div style="padding:16px 16px 12px;">
+    <div class="section-header" style="margin-bottom:12px;display:flex;align-items:center;gap:8px;">
+      <div class="live-dot"></div>
+      NASA Live · Artemis II Coverage
+    </div>
+    <div style="display:flex;border:1px solid var(--border2);border-radius:6px;overflow:hidden;width:fit-content;margin-bottom:12px;">
+      <button onclick="switchFeed(this,'main')" class="feedtab feedtab-on"
+        style="background:#fff;color:#000;font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:7px 14px;border:none;border-right:1px solid var(--border2);cursor:pointer;">
+        Mission
+      </button>
+      <button onclick="switchFeed(this,'orion')" class="feedtab"
+        style="background:transparent;color:var(--muted);font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:7px 14px;border:none;border-right:1px solid var(--border2);cursor:pointer;">
+        Live from Orion
+      </button>
+      <button onclick="switchFeed(this,'tv')" class="feedtab"
+        style="background:transparent;color:var(--muted);font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:7px 14px;border:none;cursor:pointer;">
+        NASA TV
+      </button>
+    </div>
+  </div>
+  <div style="position:relative;width:100%;padding-bottom:56.25%;background:#000;">
+    <iframe id="nasa-live-embed"
+      src="https://www.youtube.com/embed/live_stream?channel=UCLA5CATx7vFsFJw6kKV1Np4g&autoplay=1&mute=1&enablejsapi=1&playsinline=1"
+      allow="autoplay; accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+      allowfullscreen
+      style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;">
+    </iframe>
+  </div>
+  <div style="padding:8px 16px 14px;">
+    <p id="feed-note" style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.06em;">
+      24/7 mission coverage · <a href="https://www.youtube.com/@NASA" target="_blank" style="color:var(--accent);">youtube.com/@NASA</a>
+    </p>
+  </div>
+</div>
+
+<style>
+.feedtab-on { background:#fff!important; color:#000!important; }
+</style>
+
+<script>
+var _feeds = {
+  main: {
+    src: 'https://www.youtube.com/embed/live_stream?channel=UCLA5CATx7vFsFJw6kKV1Np4g&autoplay=1&mute=1&enablejsapi=1&playsinline=1',
+    note: '24/7 mission coverage · <a href="https://www.youtube.com/@NASA" target="_blank" style="color:var(--accent);">youtube.com/@NASA</a>'
+  },
+  orion: {
+    src: 'https://www.youtube.com/embed/21X5lGlDOfg?autoplay=1&mute=1&enablejsapi=1&playsinline=1',
+    note: 'Live views from Orion · signal may drop during comms blackout · <a href="https://www.nasa.gov/live" target="_blank" style="color:var(--accent);">nasa.gov/live</a>'
+  },
+  tv: {
+    src: 'https://www.youtube.com/embed/XRFV2BCMOO4?autoplay=1&mute=1&enablejsapi=1&playsinline=1',
+    note: 'NASA TV public channel · <a href="https://www.nasa.gov/live" target="_blank" style="color:var(--accent);">nasa.gov/live</a>'
+  }
+};
+function switchFeed(btn, key) {
+  document.querySelectorAll('.feedtab').forEach(function(b) {
+    b.classList.remove('feedtab-on');
+    b.style.background = 'transparent';
+    b.style.color = 'var(--muted)';
+  });
+  btn.classList.add('feedtab-on');
+  document.getElementById('nasa-live-embed').src = _feeds[key].src;
+  document.getElementById('feed-note').innerHTML = _feeds[key].note;
+}
+</script>
+
 <!-- MISSION PHASES -->
 <div class="section">
   <div class="section-header">Mission Phases</div>
