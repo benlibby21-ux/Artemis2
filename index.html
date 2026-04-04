@@ -1388,12 +1388,12 @@ const KNOWN_PHOTOS = [
   { id: 'art002e000190', title: 'Earth — day/night terminator line', credit: 'Wiseman · Apr 3 Flight Day 3', link: 'https://www.nasa.gov/image-detail/amf-art002e000190/' },
 ];
 
-// Non-API photos (launch shots etc) always shown at the end
+// Non-API photos with explicit dates so they can be sorted with API results
 const STATIC_PHOTOS = [
-  { src: 'https://www.nasa.gov/wp-content/uploads/2026/04/artemis-ii-crew-inside-orion-7.jpg', title: 'Crew inside Orion "Integrity"', credit: 'NASA · Apr 2 downlink', link: 'https://www.nasa.gov/image-detail/artemis-ii-crew-inside-orion-7/', emoji: '👨‍🚀' },
-  { src: 'https://www.nasa.gov/wp-content/uploads/2026/04/55182696113-0c4398702d-o-2.jpg', title: 'SLS lifts off from LC-39B', credit: 'NASA · Apr 1 · 18:35 CST', link: 'https://www.nasa.gov/gallery/artemis-ii-launch/', emoji: '🚀' },
-  { src: 'https://www.nasa.gov/wp-content/uploads/2026/04/55181686977-7e768c5ab5-o.jpg', title: 'SLS launch trail — 3 min exposure', credit: 'NASA · Apr 1 · 18:35 CST', link: 'https://www.nasa.gov/image-detail/artemis-ii-launch-15/', emoji: '✨' },
-  { src: 'https://www.nasa.gov/wp-content/uploads/2026/04/55182911054-439d1926bf-o.jpg', title: 'SLS ascending — engine plume', credit: 'NASA/Joel Kowsky · Apr 1', link: 'https://www.nasa.gov/image-detail/artemis-ii-launch-9/', emoji: '🔥' },
+  { src: 'https://www.nasa.gov/wp-content/uploads/2026/04/artemis-ii-crew-inside-orion-7.jpg', title: 'Crew inside Orion "Integrity"', credit: 'NASA · Apr 2 downlink', link: 'https://www.nasa.gov/image-detail/artemis-ii-crew-inside-orion-7/', emoji: '👨‍🚀', date: '2026-04-02T18:00:00Z' },
+  { src: 'https://www.nasa.gov/wp-content/uploads/2026/04/55182696113-0c4398702d-o-2.jpg', title: 'SLS lifts off from LC-39B', credit: 'NASA · Apr 1 · 18:35 CST', link: 'https://www.nasa.gov/gallery/artemis-ii-launch/', emoji: '🚀', date: '2026-04-01T23:35:00Z' },
+  { src: 'https://www.nasa.gov/wp-content/uploads/2026/04/55181686977-7e768c5ab5-o.jpg', title: 'SLS launch trail — 3 min exposure', credit: 'NASA · Apr 1 · 18:35 CST', link: 'https://www.nasa.gov/image-detail/artemis-ii-launch-15/', emoji: '✨', date: '2026-04-01T23:36:00Z' },
+  { src: 'https://www.nasa.gov/wp-content/uploads/2026/04/55182911054-439d1926bf-o.jpg', title: 'SLS ascending — engine plume', credit: 'NASA/Joel Kowsky · Apr 1', link: 'https://www.nasa.gov/image-detail/artemis-ii-launch-9/', emoji: '🔥', date: '2026-04-01T23:37:00Z' },
 ];
 
 function makePhotoCard(src, title, credit, link, emoji) {
@@ -1437,38 +1437,53 @@ async function loadGallery() {
     if (!items || items.length === 0) throw new Error('No results');
 
     // Filter to mission photos only (exclude renders/graphics by checking for 'art002' in nasa_id or keywords)
-    const missionPhotos = items.filter(item => {
-      const id = (item.data[0].nasa_id || '').toLowerCase();
-      const title = (item.data[0].title || '').toLowerCase();
-      const desc = (item.data[0].description || '').toLowerCase();
-      return id.includes('art002') || title.includes('artemis ii') || desc.includes('orion');
-    }).slice(0, 12);
+    const missionPhotos = items
+      .filter(item => {
+        const d = item.data?.[0] || {};
+        const id = (d.nasa_id || '').toLowerCase();
+        const title = (d.title || '').toLowerCase();
+        const desc = (d.description || '').toLowerCase();
+        return id.includes('art002') || title.includes('artemis ii') || desc.includes('orion');
+      })
+      .map(item => {
+        const d = item.data?.[0] || {};
+        return {
+          src: item.links?.[0]?.href,
+          title: d.title || 'Artemis II photo',
+          credit: ((d.photographer ? d.photographer + ' · ' : '') +
+            (d.date_created
+              ? new Date(d.date_created).toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric'
+                })
+              : '')),
+          link: `https://images.nasa.gov/details/${d.nasa_id || ''}`,
+          emoji: '🛸',
+          date: d.date_created || '1970-01-01T00:00:00Z'
+        };
+      })
+      .filter(photo => photo.src);
 
     if (missionPhotos.length === 0) throw new Error('No mission photos found');
 
-    // Build cards from API results
+    // Build cards from API + static photos, sorted newest first
+    const allPhotos = [...missionPhotos, ...STATIC_PHOTOS]
+      .sort((a, b) => new Date(b.date) - new Date(a.date))
+      .slice(0, 12);
+
     let html = '';
     let latestDate = '';
 
-    for (const item of missionPhotos) {
-      const d = item.data[0];
-      const imgUrl = item.links && item.links[0] ? item.links[0].href : null;
-      if (!imgUrl) continue;
-
-      const nasaId = d.nasa_id || '';
-      const title = d.title || 'Artemis II photo';
-      const dateStr = d.date_created ? new Date(d.date_created).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
-      const credit = (d.photographer ? d.photographer + ' · ' : '') + dateStr;
-      const link = `https://images.nasa.gov/details/${nasaId}`;
-
-      if (!latestDate && dateStr) latestDate = dateStr;
-      html += makePhotoCard(imgUrl, title, credit, link, '🛸');
+    for (const photo of allPhotos) {
+      if (!latestDate && photo.date) {
+        latestDate = new Date(photo.date).toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric'
+        });
+      }
+      html += makePhotoCard(photo.src, photo.title, photo.credit, photo.link, photo.emoji);
     }
 
-    // Append static launch photos
-    for (const p of STATIC_PHOTOS) {
-      html += makePhotoCard(p.src, p.title, p.credit, p.link, p.emoji);
-    }
     html += makeViewAllCard();
 
     scroll.innerHTML = html;
