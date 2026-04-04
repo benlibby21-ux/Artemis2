@@ -564,71 +564,24 @@ footer a { color: var(--accent); text-decoration: none; }
 
 <!-- NASA LIVE FEED -->
 <div class="section" style="padding:0;overflow:hidden;">
-  <div style="padding:16px 16px 12px;">
-    <div class="section-header" style="margin-bottom:12px;display:flex;align-items:center;gap:8px;">
-      <div class="live-dot"></div>
-      NASA Live · Artemis II Coverage
-    </div>
-    <div style="display:flex;border:1px solid var(--border2);border-radius:6px;overflow:hidden;width:fit-content;margin-bottom:12px;">
-      <button onclick="switchFeed(this,'main')" class="feedtab feedtab-on"
-        style="background:#fff;color:#000;font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:7px 14px;border:none;border-right:1px solid var(--border2);cursor:pointer;">
-        Mission
-      </button>
-      <button onclick="switchFeed(this,'orion')" class="feedtab"
-        style="background:transparent;color:var(--muted);font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:7px 14px;border:none;border-right:1px solid var(--border2);cursor:pointer;">
-        Live from Orion
-      </button>
-      <button onclick="switchFeed(this,'tv')" class="feedtab"
-        style="background:transparent;color:var(--muted);font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:7px 14px;border:none;cursor:pointer;">
-        NASA TV
-      </button>
-    </div>
+  <div style="padding:16px 16px 12px;display:flex;align-items:center;gap:8px;">
+    <div class="live-dot"></div>
+    <div class="section-header" style="margin-bottom:0;">NASA Live · Artemis II Mission Coverage</div>
   </div>
   <div style="position:relative;width:100%;padding-bottom:56.25%;background:#000;">
-    <iframe id="nasa-live-embed"
-      src="https://www.youtube.com/embed/live_stream?channel=UCLA5CATx7vFsFJw6kKV1Np4g&autoplay=1&mute=1&enablejsapi=1&playsinline=1"
+    <iframe
+      src="https://www.youtube.com/embed/m3kR2KK8TEs?autoplay=1&mute=1&enablejsapi=1&playsinline=1"
       allow="autoplay; accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
       allowfullscreen
       style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;">
     </iframe>
   </div>
   <div style="padding:8px 16px 14px;">
-    <p id="feed-note" style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.06em;">
-      24/7 mission coverage · <a href="https://www.youtube.com/@NASA" target="_blank" style="color:var(--accent);">youtube.com/@NASA</a>
+    <p style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.06em;">
+      <a href="https://www.youtube.com/live/m3kR2KK8TEs" target="_blank" style="color:var(--accent);">youtube.com/@NASA</a>
     </p>
   </div>
 </div>
-
-<style>
-.feedtab-on { background:#fff!important; color:#000!important; }
-</style>
-
-<script>
-var _feeds = {
-  main: {
-    src: 'https://www.youtube.com/embed/live_stream?channel=UCLA5CATx7vFsFJw6kKV1Np4g&autoplay=1&mute=1&enablejsapi=1&playsinline=1',
-    note: '24/7 mission coverage · <a href="https://www.youtube.com/@NASA" target="_blank" style="color:var(--accent);">youtube.com/@NASA</a>'
-  },
-  orion: {
-    src: 'https://www.youtube.com/embed/21X5lGlDOfg?autoplay=1&mute=1&enablejsapi=1&playsinline=1',
-    note: 'Live views from Orion · signal may drop during comms blackout · <a href="https://www.nasa.gov/live" target="_blank" style="color:var(--accent);">nasa.gov/live</a>'
-  },
-  tv: {
-    src: 'https://www.youtube.com/embed/XRFV2BCMOO4?autoplay=1&mute=1&enablejsapi=1&playsinline=1',
-    note: 'NASA TV public channel · <a href="https://www.nasa.gov/live" target="_blank" style="color:var(--accent);">nasa.gov/live</a>'
-  }
-};
-function switchFeed(btn, key) {
-  document.querySelectorAll('.feedtab').forEach(function(b) {
-    b.classList.remove('feedtab-on');
-    b.style.background = 'transparent';
-    b.style.color = 'var(--muted)';
-  });
-  btn.classList.add('feedtab-on');
-  document.getElementById('nasa-live-embed').src = _feeds[key].src;
-  document.getElementById('feed-note').innerHTML = _feeds[key].note;
-}
-</script>
 
 <!-- MISSION PHASES -->
 <div class="section">
@@ -838,7 +791,7 @@ function switchFeed(btn, key) {
 
 <footer>
   <div>Data: NASA AROW · nasa.gov/artemis-ii</div>
-  <div style="margin-top:4px;">Position estimated from last known data (106K mi, 2:30 PM ET Apr 3)</div>
+  <div style="margin-top:4px;">Position anchored to confirmed telemetry (133,660 mi · 10:06 PM ET Apr 3)</div>
   <div style="margin-top:8px;">
     <a href="https://www.nasa.gov/missions/artemis/artemis-2/track-nasas-artemis-ii-mission-in-real-time/" target="_blank">NASA AROW Live Tracker ↗</a>
     &nbsp;·&nbsp;
@@ -850,22 +803,24 @@ function switchFeed(btn, key) {
 
 <script>
 const LAUNCH = new Date('2026-04-01T22:35:00Z').getTime();
-const SPLASH = new Date('2026-04-10T17:00:00Z').getTime();
+const SPLASH = new Date('2026-04-10T18:21:00Z').getTime();
 const FLYBY  = new Date('2026-04-06T17:00:00Z').getTime();
-const KNOWN_TIME = new Date('2026-04-03T18:30:00Z').getTime();
-const EARTH_AT_KNOWN = 106000;
-const MOON_AT_KNOWN  = 157000;
-const SPEED_AT_KNOWN = 3700;
-const TOTAL_TO_MOON  = 244000;
+// Anchor: MET 02:04:30 = Apr 3 2026 ~03:09 UTC — screenshot confirmed
+// 133,660 mi from Earth · 138,118 mi to Moon · 3,058 mph
+const KNOWN_TIME     = new Date('2026-04-04T03:09:00Z').getTime();
+const EARTH_AT_KNOWN = 133660;
+const MOON_AT_KNOWN  = 138118;
+const SPEED_AT_KNOWN = 3058;
+const TOTAL_TO_MOON  = 252757;
 
 function pad(n,w=2){return String(Math.floor(n)).padStart(w,'0');}
 
 function calcOrion() {
   const now = Date.now();
   const elapsed_h = (now - KNOWN_TIME) / 3600000;
-  const speed = Math.max(3100, SPEED_AT_KNOWN - elapsed_h * 8);
+  const speed = Math.max(2200, SPEED_AT_KNOWN - elapsed_h * 3.5);
   const dEarth = Math.round(EARTH_AT_KNOWN + speed * elapsed_h);
-  const dMoon  = Math.max(5000, Math.round(MOON_AT_KNOWN - speed * elapsed_h));
+  const dMoon  = Math.max(4700, Math.round(MOON_AT_KNOWN - speed * elapsed_h));
   return { dEarth, dMoon, speed: Math.round(speed) };
 }
 
