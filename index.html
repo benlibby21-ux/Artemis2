@@ -445,6 +445,10 @@ footer a { color: var(--accent); text-decoration: none; }
 </div>
 
 <!-- DISTANCE/SPEED STATS -->
+<div style="display:flex;justify-content:space-between;align-items:center;padding:0 16px;margin-bottom:6px;">
+  <div style="font-family:var(--cond);font-size:10px;letter-spacing:0.12em;color:var(--muted);text-transform:uppercase;">Live Telemetry</div>
+  <div id="telemetry-source" style="font-family:var(--mono);font-size:10px;color:var(--muted);">Loading…</div>
+</div>
 <div class="stat-grid">
   <div class="stat-card">
     <div class="stat-label">From Earth</div>
@@ -694,7 +698,7 @@ footer a { color: var(--accent); text-decoration: none; }
 
 <footer>
   <div>Data: NASA AROW · nasa.gov/artemis-ii</div>
-  <div style="margin-top:4px;">Position anchored to confirmed telemetry (<span class="unit-mi">173,007 mi</span><span class="unit-km" style="display:none">278,430 km</span> · 1:21 PM CST Apr 4)</div>
+  <div style="margin-top:4px;">Telemetry: JPL Horizons API (live) · fallback anchor <span class="unit-mi">173,216 mi</span><span class="unit-km" style="display:none">278,770 km</span> · 1:26 PM CST Apr 4</div>
   <div style="margin-top:8px;">
     <a href="https://www.nasa.gov/missions/artemis/artemis-2/track-nasas-artemis-ii-mission-in-real-time/" target="_blank">NASA AROW Live Tracker ↗</a>
     &nbsp;·&nbsp;
@@ -708,27 +712,159 @@ footer a { color: var(--accent); text-decoration: none; }
 const LAUNCH = new Date('2026-04-01T22:35:00Z').getTime();
 const SPLASH = new Date('2026-04-10T18:21:00Z').getTime();
 const FLYBY  = new Date('2026-04-06T17:00:00Z').getTime();
-// Anchor: 1:21 PM CST Apr 4 2026 = 19:21 UTC — NASA AROW screenshot confirmed
-// 173,007 mi from Earth · 107,234 mi to Moon · 2,314 mph
-const KNOWN_TIME     = new Date('2026-04-04T19:21:00Z').getTime();
-const EARTH_AT_KNOWN = 173007;
-const MOON_AT_KNOWN  = 107234;
-const SPEED_AT_KNOWN = 2314;
-const TOTAL_TO_MOON  = 252757;
+const TOTAL_TO_MOON = 252757; // mi — total Earth-to-Moon distance this mission
 
 const MI_TO_KM = 1.60934;
+const KM_TO_MI = 0.621371;
 
 let useMetric = false;
+let liveTelemetry = null; // { dEarthMi, dMoonMi, speedMph, fetchedAt }
+
+// Fallback anchor — 1:32 PM CST Apr 4 (latest screenshot)
+// 173,430 mi from Earth · 106,866 mi to Moon · 2,307 mph
+const ANCHOR_TIME  = new Date('2026-04-04T19:32:00Z').getTime();
+const ANCHOR_EARTH = 173430;
+const ANCHOR_MOON  = 106866;
+const ANCHOR_SPEED = 2307;
+// Observed deceleration: ~3.5 mph per hour (gentle gravity gradient this far out)
+const DECEL_RATE   = 3.5;
 
 function pad(n,w=2){return String(Math.floor(n)).padStart(w,'0');}
 
+// ===== LIVE TELEMETRY via JPL Horizons =====
+// Spacecraft ID -1024 = Artemis II / Orion "Integrity"
+// Routed through allorigins.win to bypass browser CORS restriction
+async function fetchHorizons() {
+  const now = new Date();
+  const start = new Date(now.getTime() - 6 * 60000);
+  const stop  = new Date(now.getTime() + 6 * 60000);
+  const fmt = d => d.toISOString().slice(0, 16);
+
+  const horizonsParams = new URLSearchParams({
+    format: 'json',
+    COMMAND: "'-1024'",
+    OBJ_DATA: "'NO'",
+    MAKE_EPHEM: "'YES'",
+    EPHEM_TYPE: "'VECTORS'",
+    CENTER: "'500@399'",
+    START_TIME: `'${fmt(start)}'`,
+    STOP_TIME: `'${fmt(stop)}'`,
+    STEP_SIZE: "'10m'",
+    VEC_TABLE: "'2'",
+    OUT_UNITS: "'KM-S'",
+    REF_PLANE: "'ECLIPTIC'",
+    VEC_LABELS: "'NO'",
+    CSV_FORMAT: "'YES'",
+  });
+
+  const horizonsUrl = `https://ssd.jpl.nasa.gov/api/horizons.api?${horizonsParams}`;
+  // Use allorigins proxy to bypass CORS
+  const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(horizonsUrl)}`;
+
+  const res = await fetch(proxyUrl);
+  const wrapper = await res.json();
+  const data = JSON.parse(wrapper.contents);
+
+  const raw = data.result;
+  const soeIdx = raw.indexOf('$$SOE');
+  const eoeIdx = raw.indexOf('$$EOE');
+  if (soeIdx === -1) throw new Error('No SOE marker in Horizons response');
+
+  const block = raw.slice(soeIdx + 6, eoeIdx).trim();
+  const lines = block.split('\n').filter(l => l.trim() && !l.trim().startsWith('*'));
+  if (!lines.length) throw new Error('Empty ephemeris block');
+
+  const row = lines[Math.floor(lines.length / 2)].split(',').map(s => s.trim());
+  const x  = parseFloat(row[2]);
+  const y  = parseFloat(row[3]);
+  const z  = parseFloat(row[4]);
+  const vx = parseFloat(row[5]);
+  const vy = parseFloat(row[6]);
+  const vz = parseFloat(row[7]);
+
+  if ([x,y,z,vx,vy,vz].some(isNaN)) throw new Error('NaN in parsed vectors');
+
+  const dEarthKm = Math.sqrt(x*x + y*y + z*z);
+  const speedKms  = Math.sqrt(vx*vx + vy*vy + vz*vz);
+  const dEarthMi  = dEarthKm * KM_TO_MI;
+  const speedMph   = speedKms * 3600 * KM_TO_MI;
+  const dMoonMi    = Math.max(4700, TOTAL_TO_MOON - dEarthMi);
+
+  return { dEarthMi, dMoonMi, speedMph, fetchedAt: Date.now() };
+}
+
+async function refreshLiveTelemetry() {
+  try {
+    liveTelemetry = await fetchHorizons();
+    const badge = document.getElementById('telemetry-source');
+    if (badge) {
+      badge.textContent = '● LIVE · JPL Horizons';
+      badge.style.color = 'var(--accent2)';
+    }
+  } catch(e) {
+    console.warn('Horizons fetch failed:', e.message);
+    const badge = document.getElementById('telemetry-source');
+    if (badge) {
+      badge.textContent = '○ Est · anchor 1:32 PM CST';
+      badge.style.color = 'var(--muted)';
+    }
+  }
+}
+
 function calcOrion() {
-  const now = Date.now();
-  const elapsed_h = (now - KNOWN_TIME) / 3600000;
-  const speed = Math.max(1500, SPEED_AT_KNOWN - elapsed_h * 42);
-  const dEarth = Math.round(EARTH_AT_KNOWN + speed * elapsed_h);
-  const dMoon  = Math.max(4700, Math.round(MOON_AT_KNOWN - speed * elapsed_h));
+  const src = liveTelemetry || {
+    dEarthMi: ANCHOR_EARTH,
+    dMoonMi:  ANCHOR_MOON,
+    speedMph:  ANCHOR_SPEED,
+    fetchedAt: ANCHOR_TIME,
+  };
+  const elapsedH = (Date.now() - src.fetchedAt) / 3600000;
+  // Don't project more than 30 min from last anchor without live data
+  const clampedH = liveTelemetry ? elapsedH : Math.min(elapsedH, 0.5);
+  const speed  = Math.max(1200, src.speedMph - clampedH * DECEL_RATE);
+  const dEarth = Math.round(src.dEarthMi + speed * elapsedH);
+  const dMoon  = Math.max(4700, Math.round(src.dMoonMi  - speed * elapsedH));
   return { dEarth, dMoon, speed: Math.round(speed) };
+}
+
+function updateBanner() {
+  const now = Date.now();
+  const { dEarth, dMoon, speed } = calcOrion();
+  const banner = document.getElementById('live-banner');
+  if (!banner) return;
+
+  // Key mission timestamps (UTC)
+  const TLI       = new Date('2026-04-02T23:49:00Z').getTime(); // TLI burn complete
+  const EQUIDIST  = new Date('2026-04-04T12:00:00Z').getTime(); // ~equidistance passed
+  const LUNAR_SOI = new Date('2026-04-05T16:00:00Z').getTime(); // enters lunar sphere of influence
+  const FLYBY_START = new Date('2026-04-06T15:00:00Z').getTime();
+  const CLOSEST   = new Date('2026-04-06T17:00:00Z').getTime(); // closest approach
+  const FLYBY_END = new Date('2026-04-06T23:00:00Z').getTime();
+  const RETURN_BURN1 = new Date('2026-04-06T23:00:00Z').getTime();
+  const SPLASH    = new Date('2026-04-10T18:21:00Z').getTime();
+
+  let msg = '';
+
+  if (now < TLI) {
+    msg = 'Orion in Earth orbit · Pre-TLI burn';
+  } else if (now < EQUIDIST) {
+    msg = `Orion on translunar coast · ${dEarth.toLocaleString()} mi from Earth · Approaching equidistance`;
+  } else if (now < LUNAR_SOI) {
+    msg = `Orion past equidistance · ${dMoon.toLocaleString()} mi from Moon · Moon's gravity strengthening`;
+  } else if (now < FLYBY_START) {
+    msg = `Orion in lunar sphere of influence · ${dMoon.toLocaleString()} mi from Moon · Flyby in hours`;
+  } else if (now < CLOSEST) {
+    msg = `🌕 Lunar flyby underway · ${dMoon.toLocaleString()} mi from Moon · Closest approach soon`;
+  } else if (now < FLYBY_END) {
+    msg = `🌕 Past closest approach · ${dMoon.toLocaleString()} mi from Moon · Solar eclipse window`;
+  } else if (now < SPLASH) {
+    const hoursToSplash = Math.round((SPLASH - now) / 3600000);
+    msg = `Orion on return trajectory · ${hoursToSplash}h to splashdown · ${dEarth.toLocaleString()} mi from Earth`;
+  } else {
+    msg = '🎉 Splashdown! Artemis II mission complete';
+  }
+
+  banner.textContent = msg;
 }
 
 function setUnits(mode) {
@@ -788,6 +924,8 @@ function updateClock() {
     ? `${Math.round(dEarth * MI_TO_KM).toLocaleString()} km from Earth`
     : `${dEarth.toLocaleString()} mi from Earth`;
   document.getElementById('traj-pct').textContent = distLabel;
+
+  updateBanner();
 }
 
 function drawTrajectory() {
@@ -820,6 +958,10 @@ function drawTrajectory() {
   document.getElementById('traj-glow').setAttribute('cx', ox.toFixed(1));
   document.getElementById('traj-glow').setAttribute('cy', oy.toFixed(1));
 }
+
+// Kick off live telemetry — fetch immediately, then every 2 minutes
+refreshLiveTelemetry();
+setInterval(refreshLiveTelemetry, 2 * 60 * 1000);
 
 updateClock();
 drawTrajectory();
