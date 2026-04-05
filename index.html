@@ -197,6 +197,7 @@ h1 span { color: var(--accent); }
 
 /* ===== PROGRESS SECTION ===== */
 @keyframes loading-pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+@keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
 .badge-loading { animation: loading-pulse 1.6s ease-in-out infinite; }
 .section {
   margin: 0 16px 14px;
@@ -557,7 +558,16 @@ footer a { color: var(--accent); text-decoration: none; }
 
 <!-- CREW PHOTOS -->
 <div class="section">
-  <div class="section-header" id="gallery-header">Photos from Orion · Loading latest…</div>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+    <div class="section-header" id="gallery-header" style="margin-bottom:0;">Photos from Orion · Loading latest…</div>
+    <button id="gallery-refresh-btn" onclick="refreshGallery()" title="Refresh photos"
+      style="background:none;border:1px solid var(--border2);border-radius:6px;padding:4px 8px;cursor:pointer;
+             color:var(--muted);font-size:13px;line-height:1;transition:color 0.2s,border-color 0.2s;"
+      onmouseover="this.style.color='var(--accent)';this.style.borderColor='var(--accent)'"
+      onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--border2)'">
+      <span id="gallery-refresh-icon">↻</span>
+    </button>
+  </div>
   <div class="gallery-scroll" id="gallery-scroll">
     <div style="display:flex;align-items:center;justify-content:center;width:100%;padding:20px 0;">
       <div style="font-family:var(--mono);font-size:11px;color:var(--muted);">Fetching latest NASA photos…</div>
@@ -933,7 +943,7 @@ async function fetchHorizonsVector(commandId, atTime) {
       const res = await fetch(proxy.url, { signal: AbortSignal.timeout(8000) });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       data = await proxy.parse(res);
-      if (data?.result) break; // success
+      if (data?.result) break;
     } catch(e) { lastErr = e; data = null; }
   }
   if (!data?.result) throw new Error(`All proxies failed: ${lastErr?.message}`);
@@ -1556,6 +1566,21 @@ async function loadGallery() {
     html += makeViewAllCard();
     scroll.innerHTML = html;
     header.textContent = 'Photos from Orion · Apr 3–4 · nasa.gov';
+  }
+}
+
+async function refreshGallery() {
+  const btn = document.getElementById('gallery-refresh-btn');
+  const icon = document.getElementById('gallery-refresh-icon');
+  if (!btn || btn.disabled) return;
+  btn.disabled = true;
+  icon.style.display = 'inline-block';
+  icon.style.animation = 'spin 0.8s linear infinite';
+  try {
+    await loadGallery();
+  } finally {
+    btn.disabled = false;
+    icon.style.animation = '';
   }
 }
 
