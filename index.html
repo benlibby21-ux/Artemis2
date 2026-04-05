@@ -413,6 +413,27 @@ footer a { color: var(--accent); text-decoration: none; }
   <div class="subhead">Orion "Integrity" · Lunar Free-Return Flyby</div>
   <div class="launch-time">Mission Elapsed Time: <span id="clock">00:00:00:00</span></div>
   <div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:3px;">Launched Apr 1 · 18:35 CST &nbsp;|&nbsp; Splashdown in <span id="countdown"></span></div>
+  <!-- TIMEZONE CONVERTER -->
+  <div id="tz-widget" style="margin-top:10px;display:inline-flex;align-items:center;gap:6px;
+    background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:8px;
+    padding:6px 10px;font-family:var(--mono);font-size:10px;flex-wrap:wrap;justify-content:center;">
+    <span style="color:var(--muted);letter-spacing:0.08em;">SPLASHDOWN:</span>
+    <span id="tz-display" style="color:var(--accent2);font-weight:700;">Apr 10 · 13:21</span>
+    <select id="tz-select" onchange="updateTzDisplay()" style="
+      background:rgba(77,168,255,0.1);border:1px solid rgba(77,168,255,0.2);
+      border-radius:4px;color:var(--accent);font-family:var(--mono);font-size:10px;
+      padding:2px 4px;cursor:pointer;outline:none;">
+      <option value="America/Chicago">CST/CDT</option>
+      <option value="America/New_York">EST/EDT</option>
+      <option value="America/Los_Angeles">PST/PDT</option>
+      <option value="America/Denver">MST/MDT</option>
+      <option value="UTC">UTC</option>
+      <option value="Europe/London">GMT/BST</option>
+      <option value="Europe/Paris">CET/CEST</option>
+      <option value="Asia/Tokyo">JST</option>
+      <option value="Australia/Sydney">AEST</option>
+    </select>
+  </div>
 </header>
 
 <!-- LIVE BANNER -->
@@ -865,11 +886,11 @@ function saveCachedTelemetry(t) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(t)); } catch(e) {}
 }
 
-// Fallback anchor — Apr 4 13:32 CST (hardcoded baseline if localStorage is empty)
-const ANCHOR_TIME  = new Date('2026-04-04T19:32:00Z').getTime();
-const ANCHOR_EARTH = 173430;
-const ANCHOR_MOON  = 106866;
-const ANCHOR_SPEED = 2307;
+// Fallback anchor — Apr 5 ~15:42 CDT (from NASA AROW screenshot)
+const ANCHOR_TIME  = new Date('2026-04-05T20:42:00Z').getTime();
+const ANCHOR_EARTH = 221444;
+const ANCHOR_MOON  = 55920;
+const ANCHOR_SPEED = 1537;
 
 // Load any cached telemetry from a previous session — used immediately for estimates
 const cachedTelemetry = loadCachedTelemetry();
@@ -929,18 +950,23 @@ async function fetchHorizonsVector(commandId, atTime) {
 
   const horizonsUrl = `https://ssd.jpl.nasa.gov/api/horizons.api?${horizonsParams}`;
 
-  // Try multiple CORS proxies in order — JPL blocks direct browser calls
+  // Multiple CORS proxies — JPL blocks direct browser calls. Try each in order.
   const PROXIES = [
-    { url: `https://corsproxy.io/?${encodeURIComponent(horizonsUrl)}`,        parse: r => r.json() },
-    { url: `https://api.allorigins.win/get?url=${encodeURIComponent(horizonsUrl)}`, parse: async r => { const w = await r.json(); return JSON.parse(w.contents); } },
-    { url: `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(horizonsUrl)}`, parse: r => r.json() },
+    { url: `https://corsproxy.io/?url=${encodeURIComponent(horizonsUrl)}`,
+      parse: async r => JSON.parse(await r.text()) },
+    { url: `https://api.allorigins.win/raw?url=${encodeURIComponent(horizonsUrl)}`,
+      parse: async r => JSON.parse(await r.text()) },
+    { url: `https://proxy.cors.sh/${horizonsUrl}`,
+      parse: async r => JSON.parse(await r.text()) },
+    { url: `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(horizonsUrl)}`,
+      parse: async r => JSON.parse(await r.text()) },
   ];
 
   let data = null;
   let lastErr = null;
   for (const proxy of PROXIES) {
     try {
-      const res = await fetch(proxy.url, { signal: AbortSignal.timeout(8000) });
+      const res = await fetch(proxy.url, { signal: AbortSignal.timeout(9000) });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       data = await proxy.parse(res);
       if (data?.result) break;
@@ -1244,6 +1270,32 @@ function toggleTelemetryInfo() {
   }
 }
 
+// ===== TIMEZONE CONVERTER =====
+const SPLASHDOWN_ISO = '2026-04-10T18:21:00Z';
+const LAUNCH_ISO     = '2026-04-01T22:35:00Z';
+
+function updateTzDisplay() {
+  const sel = document.getElementById('tz-select');
+  const disp = document.getElementById('tz-display');
+  if (!sel || !disp) return;
+  const tz = sel.value;
+  try {
+    const splash = new Date(SPLASHDOWN_ISO);
+    const formatted = splash.toLocaleString('en-US', {
+      timeZone: tz,
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+    disp.textContent = formatted;
+  } catch(e) { disp.textContent = '—'; }
+}
+
+// Init on load
+updateTzDisplay();
+
 async function manualRefresh() {
   const btn = document.getElementById('refresh-btn');
   if (btn) {
@@ -1439,14 +1491,18 @@ function renderActivities() {
 // ===== DYNAMIC PHOTO GALLERY =====
 // Known Artemis II photos as fallback (newest first)
 const KNOWN_PHOTOS = [
-  { id: 'art002e004440', title: 'Koch illuminated by screen inside Orion', credit: 'NASA · Apr 3 Flight Day 3', link: 'https://www.nasa.gov/gallery/journey-to-the-moon/' },
-  { id: 'art002e004439', title: 'Hansen working inside Orion', credit: 'NASA · Apr 3 Flight Day 3', link: 'https://www.nasa.gov/gallery/journey-to-the-moon/' },
-  { id: 'art002e004438', title: 'Moon through Orion window', credit: 'Artemis II crew · Apr 3', link: 'https://www.nasa.gov/gallery/journey-to-the-moon/' },
-  { id: 'art002e004357', title: 'Orion selfie in deep space', credit: 'NASA · Apr 3 Flight Day 3', link: 'https://www.nasa.gov/gallery/journey-to-the-moon/' },
-  { id: 'art002e000193', title: 'Backlit Earth — nightside glow', credit: 'Wiseman · Apr 3 Flight Day 3', link: 'https://www.nasa.gov/image-detail/amf-art002e000193/' },
-  { id: 'art002e000192', title: 'Earth — aurora + zodiacal light', credit: 'Wiseman · Apr 2 post-TLI burn', link: 'https://www.nasa.gov/image-article/hello-world/' },
-  { id: 'art002e000191', title: 'Pale blue dot through Orion window', credit: 'Wiseman · Apr 3 Flight Day 3', link: 'https://www.nasa.gov/gallery/journey-to-the-moon/' },
-  { id: 'art002e000190', title: 'Earth — day/night terminator line', credit: 'Wiseman · Apr 3 Flight Day 3', link: 'https://www.nasa.gov/image-detail/amf-art002e000190/' },
+  { id: 'art002m1010940907', title: 'Orion aimed straight at the Moon', credit: 'NASA · Apr 4 Flight Day 4', link: 'https://www.nasa.gov/gallery/journey-to-the-moon/' },
+  { id: 'art002e009007',     title: 'Wiseman peers out of Orion window', credit: 'NASA · Apr 4 Flight Day 4', link: 'https://www.nasa.gov/gallery/journey-to-the-moon/' },
+  { id: 'art002e008487',     title: 'Koch peers out of Orion window', credit: 'NASA · Apr 4 Flight Day 4', link: 'https://www.nasa.gov/gallery/journey-to-the-moon/' },
+  { id: 'art002e008486',     title: 'Wiseman at Orion window — Flight Day 4', credit: 'NASA · Apr 4', link: 'https://www.nasa.gov/gallery/journey-to-the-moon/' },
+  { id: 'art002e004440',     title: 'Koch illuminated by screen inside Orion', credit: 'NASA · Apr 3 Flight Day 3', link: 'https://www.nasa.gov/gallery/journey-to-the-moon/' },
+  { id: 'art002e004439',     title: 'Hansen working inside Orion', credit: 'NASA · Apr 3 Flight Day 3', link: 'https://www.nasa.gov/gallery/journey-to-the-moon/' },
+  { id: 'art002e004438',     title: 'Moon through Orion window', credit: 'Artemis II crew · Apr 3', link: 'https://www.nasa.gov/gallery/journey-to-the-moon/' },
+  { id: 'art002e004357',     title: 'Orion selfie in deep space', credit: 'NASA · Apr 3 Flight Day 3', link: 'https://www.nasa.gov/gallery/journey-to-the-moon/' },
+  { id: 'art002e000193',     title: 'Backlit Earth — nightside glow', credit: 'Wiseman · Apr 3 Flight Day 3', link: 'https://www.nasa.gov/image-detail/amf-art002e000193/' },
+  { id: 'art002e000192',     title: 'Earth — aurora + zodiacal light', credit: 'Wiseman · Apr 2 post-TLI burn', link: 'https://www.nasa.gov/image-article/hello-world/' },
+  { id: 'art002e000191',     title: 'Pale blue dot through Orion window', credit: 'Wiseman · Apr 3 Flight Day 3', link: 'https://www.nasa.gov/gallery/journey-to-the-moon/' },
+  { id: 'art002e000190',     title: 'Earth — day/night terminator line', credit: 'Wiseman · Apr 3 Flight Day 3', link: 'https://www.nasa.gov/image-detail/amf-art002e000190/' },
 ];
 
 // Non-API photos with explicit dates so they can be sorted with API results
