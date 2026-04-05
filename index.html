@@ -918,11 +918,10 @@ async function fetchHorizonsVector(commandId, atTime) {
   });
 
   const horizonsUrl = `https://ssd.jpl.nasa.gov/api/horizons.api?${horizonsParams}`;
-  const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(horizonsUrl)}`;
+  const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(horizonsUrl)}`;
 
   const res = await fetch(proxyUrl);
-  const wrapper = await res.json();
-  const data = JSON.parse(wrapper.contents);
+  const data = await res.json();
 
   const raw = data.result;
   const soeIdx = raw.indexOf('$$SOE');
@@ -1466,7 +1465,7 @@ async function loadGallery() {
 
   try {
     // NASA Images API — search for Artemis II, sorted by date descending
-    const url = 'https://images-api.nasa.gov/search?q=artemis+ii+orion&media_type=image&year_start=2026&page_size=20';
+    const url = 'https://images-api.nasa.gov/search?q=artemis+II&media_type=image&year_start=2026';
     const res = await fetch(url);
     const data = await res.json();
     const items = data.collection.items;
@@ -1480,7 +1479,10 @@ async function loadGallery() {
         const id = (d.nasa_id || '').toLowerCase();
         const title = (d.title || '').toLowerCase();
         const desc = (d.description || '').toLowerCase();
-        return id.includes('art002') || title.includes('artemis ii') || desc.includes('orion');
+        return id.includes('art002') || 
+               title.includes('artemis') || 
+               desc.includes('artemis') || 
+               desc.includes('orion');
       })
       .map(item => {
         const d = item.data?.[0] || {};
