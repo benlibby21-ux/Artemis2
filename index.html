@@ -918,10 +918,25 @@ async function fetchHorizonsVector(commandId, atTime) {
   });
 
   const horizonsUrl = `https://ssd.jpl.nasa.gov/api/horizons.api?${horizonsParams}`;
-  const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(horizonsUrl)}`;
 
-  const res = await fetch(proxyUrl);
-  const data = await res.json();
+  // Try multiple CORS proxies in order — JPL blocks direct browser calls
+  const PROXIES = [
+    { url: `https://corsproxy.io/?${encodeURIComponent(horizonsUrl)}`,        parse: r => r.json() },
+    { url: `https://api.allorigins.win/get?url=${encodeURIComponent(horizonsUrl)}`, parse: async r => { const w = await r.json(); return JSON.parse(w.contents); } },
+    { url: `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(horizonsUrl)}`, parse: r => r.json() },
+  ];
+
+  let data = null;
+  let lastErr = null;
+  for (const proxy of PROXIES) {
+    try {
+      const res = await fetch(proxy.url, { signal: AbortSignal.timeout(8000) });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      data = await proxy.parse(res);
+      if (data?.result) break; // success
+    } catch(e) { lastErr = e; data = null; }
+  }
+  if (!data?.result) throw new Error(`All proxies failed: ${lastErr?.message}`);
 
   const raw = data.result;
   const soeIdx = raw.indexOf('$$SOE');
@@ -1479,9 +1494,9 @@ async function loadGallery() {
         const id = (d.nasa_id || '').toLowerCase();
         const title = (d.title || '').toLowerCase();
         const desc = (d.description || '').toLowerCase();
-        return id.includes('art002') || 
-               title.includes('artemis') || 
-               desc.includes('artemis') || 
+        return id.includes('art002') ||
+               title.includes('artemis') ||
+               desc.includes('artemis') ||
                desc.includes('orion');
       })
       .map(item => {
