@@ -415,13 +415,6 @@ footer a { color: var(--accent); text-decoration: none; }
   <div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:3px;">Launched Apr 1 · 18:35 CST &nbsp;|&nbsp; Splashdown in <span id="countdown"></span></div>
 </header>
 
-<!-- FLYBY COUNTDOWN -->
-<div id="flyby-countdown-block" style="margin:0 16px 14px;background:rgba(245,166,35,0.06);border:1px solid rgba(245,166,35,0.25);border-radius:10px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px;">
-  <div style="font-family:var(--cond);font-size:10px;letter-spacing:0.12em;color:var(--gold);text-transform:uppercase;white-space:nowrap;">🌕 Lunar Flyby</div>
-  <div id="flyby-digits" style="font-family:var(--mono);font-size:15px;font-weight:700;color:var(--gold);">—</div>
-  <div id="flyby-sub" style="font-family:var(--mono);font-size:9px;color:var(--muted);text-align:right;line-height:1.4;">until closest approach<br>~4,047 mi above Moon</div>
-</div>
-
 <!-- LIVE BANNER -->
 <div class="update-bar">
   <div class="update-pulse"></div>
@@ -835,96 +828,264 @@ const MI_TO_KM = 1.60934;
 const KM_TO_MI = 0.621371;
 
 let useMetric = false;
-function pad(n,w=2){return String(Math.floor(n)).padStart(w,'0');}
+function pad(n,w=2){return String(Math.floor(n)).padStart(w,"0");}
+let liveTelemetry = null; // { dEarthMi, dMoonMi, speedMph, speedKms, fetchedAt }
 
-function getTelemetryState() { return 'traj'; }
-function getMoonProgressPct(dEarth, dMoon) {
-  const t = dEarth + dMoon;
-  return t > 0 ? Math.max(0, Math.min(100, Math.round(dEarth / t * 100))) : 0;
+function getTelemetryState() {
+  if (liveTelemetry?.source === 'live') return 'live';
+  if (liveTelemetry?.source === 'orion-only') return 'orion-only';
+  if (cachedTelemetry) return 'cached';
+  return 'anchor';
 }
 
-// Telemetry: pre-embedded JPL Horizons trajectory, interpolated in real time
-
-// ===== PRE-EMBEDDED JPL HORIZONS TRAJECTORY =====
-// Source: JPL Horizons COMMAND='-1024', Earth-centered vectors, KM-S
-// Rows: [utcMs, dEarthMi, dMoonMi, speedMph, speedKms]
-// Anchored to NASA AROW screenshot Apr 5 15:42 CDT (221,444 mi / 55,920 mi / 1,537 mph)
-const TRAJ = [
-  [new Date('2026-04-01T22:35:00Z').getTime(), 3959, 238801, 17500, 7.82],
-  [new Date('2026-04-02T04:00:00Z').getTime(), 8200, 234600, 14200, 6.35],
-  [new Date('2026-04-02T10:00:00Z').getTime(), 14100, 228900, 11800, 5.28],
-  [new Date('2026-04-02T16:00:00Z').getTime(), 21000, 222200, 10400, 4.65],
-  [new Date('2026-04-02T23:49:00Z').getTime(), 31200, 213000, 24700, 11.04],
-  [new Date('2026-04-03T04:00:00Z').getTime(), 56000, 194000, 6800, 3.04],
-  [new Date('2026-04-03T10:00:00Z').getTime(), 88000, 163000, 5600, 2.50],
-  [new Date('2026-04-03T16:00:00Z').getTime(), 118000, 134000, 4900, 2.19],
-  [new Date('2026-04-03T22:00:00Z').getTime(), 146000, 107000, 4200, 1.88],
-  [new Date('2026-04-04T04:00:00Z').getTime(), 163000, 91000, 3700, 1.65],
-  [new Date('2026-04-04T10:00:00Z').getTime(), 178000, 77000, 3200, 1.43],
-  [new Date('2026-04-04T16:00:00Z').getTime(), 192000, 63000, 2800, 1.25],
-  [new Date('2026-04-04T22:00:00Z').getTime(), 204000, 51000, 2400, 1.07],
-  [new Date('2026-04-05T04:00:00Z').getTime(), 214000, 42000, 2050, 0.92],
-  [new Date('2026-04-05T10:00:00Z').getTime(), 220000, 36000, 1820, 0.81],
-  [new Date('2026-04-05T16:00:00Z').getTime(), 224000, 31500, 1640, 0.73],
-  [new Date('2026-04-05T20:42:00Z').getTime(), 221444, 55920, 1537, 0.687],
-  [new Date('2026-04-05T23:51:00Z').getTime(), 226050, 49632, 1465, 0.655],
-  [new Date('2026-04-06T02:00:00Z').getTime(), 228000, 44000, 1430, 0.640],
-  [new Date('2026-04-06T06:00:00Z').getTime(), 231000, 35000, 1390, 0.622],
-  [new Date('2026-04-06T10:00:00Z').getTime(), 233500, 25000, 1420, 0.635],
-  [new Date('2026-04-06T13:00:00Z').getTime(), 235000, 16000, 1600, 0.715],
-  [new Date('2026-04-06T15:00:00Z').getTime(), 235600, 7800, 2100, 0.939],
-  [new Date('2026-04-06T17:00:00Z').getTime(), 235800, 4047, 3200, 1.431],
-  [new Date('2026-04-06T19:00:00Z').getTime(), 235200, 7500, 2800, 1.25],
-  [new Date('2026-04-06T23:00:00Z').getTime(), 232000, 14000, 2200, 0.98],
-  [new Date('2026-04-07T06:00:00Z').getTime(), 225000, 22000, 3800, 1.70],
-  [new Date('2026-04-07T12:00:00Z').getTime(), 216000, 32000, 4200, 1.88],
-  [new Date('2026-04-07T18:00:00Z').getTime(), 205000, 45000, 4600, 2.06],
-  [new Date('2026-04-08T00:00:00Z').getTime(), 192000, 60000, 5000, 2.24],
-  [new Date('2026-04-08T06:00:00Z').getTime(), 177000, 76000, 5400, 2.41],
-  [new Date('2026-04-08T12:00:00Z').getTime(), 160000, 93000, 5900, 2.64],
-  [new Date('2026-04-08T18:00:00Z').getTime(), 141000, 111000, 6500, 2.91],
-  [new Date('2026-04-09T00:00:00Z').getTime(), 121000, 130000, 7200, 3.22],
-  [new Date('2026-04-09T06:00:00Z').getTime(), 99000, 150000, 8100, 3.62],
-  [new Date('2026-04-09T12:00:00Z').getTime(), 76000, 171000, 9300, 4.16],
-  [new Date('2026-04-09T18:00:00Z').getTime(), 52000, 193000, 11000, 4.92],
-  [new Date('2026-04-10T00:00:00Z').getTime(), 28000, 214000, 14000, 6.26],
-  [new Date('2026-04-10T06:00:00Z').getTime(), 12000, 228000, 18500, 8.27],
-  [new Date('2026-04-10T12:00:00Z').getTime(), 3500, 236000, 24000, 10.73],
-  [new Date('2026-04-10T18:21:00Z').getTime(), 0, 238900, 0, 0],
-];
-
-function calcOrion() {
-  const now = Date.now();
-  if (now <= TRAJ[0][0]) return { dEarth: TRAJ[0][1], dMoon: TRAJ[0][2], speed: TRAJ[0][3], speedKms: TRAJ[0][4], telemetryState: 'traj' };
-  if (now >= TRAJ[TRAJ.length-1][0]) return { dEarth: 0, dMoon: TRAJ[TRAJ.length-1][2], speed: 0, speedKms: 0, telemetryState: 'traj' };
-  let lo = 0, hi = TRAJ.length - 1;
-  while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (TRAJ[mid][0] <= now) lo = mid; else hi = mid; }
-  const [t0,e0,m0,s0,k0] = TRAJ[lo], [t1,e1,m1,s1,k1] = TRAJ[hi];
-  const f = (now - t0) / (t1 - t0);
-  return { dEarth: Math.round(e0+(e1-e0)*f), dMoon: Math.max(0,Math.round(m0+(m1-m0)*f)), speed: Math.round(s0+(s1-s0)*f), speedKms: parseFloat((k0+(k1-k0)*f).toFixed(3)), telemetryState: 'traj' };
+function getMoonProgressPct(dEarth, dMoon, telemetryState) {
+  if (telemetryState === 'live' && Number.isFinite(dEarth) && Number.isFinite(dMoon) && (dEarth + dMoon) > 0) {
+    return Math.max(0, Math.min(100, Math.round((dEarth / (dEarth + dMoon)) * 100)));
+  }
+  return Math.max(0, Math.min(99, Math.round((dEarth / FLYBY_EARTH_MOON_MI) * 100)));
 }
 
-const cachedTelemetry = null;
-let liveTelemetry = null;
+// ===== PERSISTED ANCHOR =====
+// On startup, load the last successful live fetch from localStorage.
+// This is used as the dead-reckoning baseline instead of the hardcoded Apr 4 anchor,
+// so estimates are accurate even hours after the last page load.
+const STORAGE_KEY = 'artemis2_telemetry_v1';
+
+function loadCachedTelemetry() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const t = JSON.parse(raw);
+    // Sanity check — discard if older than 24h or missing fields
+    if (!t.fetchedAt || !t.dEarthMi || (Date.now() - t.fetchedAt) > 86400000) return null;
+    return t;
+  } catch(e) { return null; }
+}
+
+function saveCachedTelemetry(t) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(t)); } catch(e) {}
+}
+
+// Fallback anchor — Apr 4 13:32 CST (hardcoded baseline if localStorage is empty)
+const ANCHOR_TIME  = new Date('2026-04-05T23:51:00Z').getTime();
+const ANCHOR_EARTH = 226050;
+const ANCHOR_MOON  = 49632;
+const ANCHOR_SPEED = 1465;
+
+// Load any cached telemetry from a previous session — used immediately for estimates
+const cachedTelemetry = loadCachedTelemetry();
+
+// Observed deceleration: ~3.5 mph per hour (gentle gravity gradient this far out)
+const DECEL_RATE = 3.5;
+
+
+// ===== LIVE TELEMETRY via JPL Horizons =====
+// Orion ID: -1024  |  Moon ID: 301  |  Frame: Earth-centered ecliptic J2000 (500@399)
+//
+// "Distance to Moon" = distance from Orion's LIVE position to the point in space
+// where the Moon WILL BE at closest approach (Apr 6 ~17:00 UTC).
+// This counts down to zero as Orion reaches the flyby point.
+//
+// Moon position is fetched ONCE for the flyby timestamp and cached.
+// Orion position is fetched live every 2 minutes.
+
+const FLYBY_UTC = '2026-04-06T17:00:00Z'; // closest approach timestamp
+
+// Earth-Moon distance at flyby (Apr 6 ~17:00 UTC) — Moon is near apogee that day
+// Source: lunar apogee Apr 6 2026 = ~404,974 km / 251,639 mi per TheSkyLive
 const FLYBY_EARTH_MOON_MI = 251639;
 const FLYBY_EARTH_MOON_KM = Math.round(FLYBY_EARTH_MOON_MI / KM_TO_MI);
 
-async function refreshLiveTelemetry() {
-  const badge = document.getElementById('telemetry-source');
-  if (badge) {
-    badge.textContent = '● JPL Horizons trajectory · interpolated every second';
-    badge.style.color = 'var(--accent2)';
-    badge.classList.remove('badge-loading');
-  }
-  const moonLabel = document.getElementById('s-moon-label');
-  if (moonLabel) {
+async function fetchHorizonsVector(commandId, atTime) {
+  // atTime: ISO string for the exact moment to query (defaults to now ±6min window)
+  let start, stop;
+  if (atTime) {
+    const t = new Date(atTime).getTime();
+    start = new Date(t - 3 * 60000);  // ±3 min window around fixed time
+    stop  = new Date(t + 3 * 60000);
+  } else {
     const now = Date.now();
-    const FLYBY = new Date('2026-04-06T17:00:00Z').getTime();
-    moonLabel.textContent = now < FLYBY ? 'To Moon' : 'From Moon';
+    start = new Date(now - 6 * 60000);
+    stop  = new Date(now + 6 * 60000);
+  }
+  const fmt = d => d.toISOString().slice(0, 16);
+
+  const horizonsParams = new URLSearchParams({
+    format: 'json',
+    COMMAND: `'${commandId}'`,
+    OBJ_DATA: "'NO'",
+    MAKE_EPHEM: "'YES'",
+    EPHEM_TYPE: "'VECTORS'",
+    CENTER: "'500@399'",
+    START_TIME: `'${fmt(start)}'`,
+    STOP_TIME: `'${fmt(stop)}'`,
+    STEP_SIZE: "'10m'",
+    VEC_TABLE: "'2'",
+    OUT_UNITS: "'KM-S'",
+    REF_PLANE: "'EARTH'",
+    VEC_LABELS: "'NO'",
+    CSV_FORMAT: "'YES'",
+  });
+
+  const horizonsUrl = `https://ssd.jpl.nasa.gov/api/horizons.api?${horizonsParams}`;
+
+  // Try multiple CORS proxies in order — JPL blocks direct browser calls
+  const PROXIES = [
+    { url: `https://corsproxy.io/?${encodeURIComponent(horizonsUrl)}`,        parse: r => r.json() },
+    { url: `https://api.allorigins.win/get?url=${encodeURIComponent(horizonsUrl)}`, parse: async r => { const w = await r.json(); return JSON.parse(w.contents); } },
+    { url: `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(horizonsUrl)}`, parse: r => r.json() },
+  ];
+
+  let data = null;
+  let lastErr = null;
+  for (const proxy of PROXIES) {
+    try {
+      const res = await fetch(proxy.url, { signal: AbortSignal.timeout(8000) });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      data = await proxy.parse(res);
+      if (data?.result) break;
+    } catch(e) { lastErr = e; data = null; }
+  }
+  if (!data?.result) throw new Error(`All proxies failed: ${lastErr?.message}`);
+
+  const raw = data.result;
+  const soeIdx = raw.indexOf('$$SOE');
+  const eoeIdx = raw.indexOf('$$EOE');
+  if (soeIdx === -1) throw new Error(`No SOE marker for COMMAND=${commandId}`);
+
+  const block = raw.slice(soeIdx + 6, eoeIdx).trim();
+  const lines = block.split('\n').filter(l => l.trim() && !l.trim().startsWith('*'));
+  if (!lines.length) throw new Error('Empty ephemeris block');
+
+  const row = lines[Math.floor(lines.length / 2)].split(',').map(s => s.trim());
+  const x  = parseFloat(row[2]);
+  const y  = parseFloat(row[3]);
+  const z  = parseFloat(row[4]);
+  const vx = parseFloat(row[5]);
+  const vy = parseFloat(row[6]);
+  const vz = parseFloat(row[7]);
+
+  if ([x,y,z,vx,vy,vz].some(isNaN)) throw new Error(`NaN in vectors for COMMAND=${commandId}`);
+  return { x, y, z, vx, vy, vz };
+}
+
+async function fetchHorizons() {
+  // Fetch Orion and Moon in parallel — both at current time, relative to Earth center
+  const [orion, moon] = await Promise.all([
+    fetchHorizonsVector('-1024'),   // Artemis II / Orion "Integrity"
+    fetchHorizonsVector('301'),     // Earth's Moon (current position)
+  ]);
+
+  // Distance from Earth
+  const dEarthKm = Math.sqrt(orion.x**2 + orion.y**2 + orion.z**2);
+
+  // True distance from Moon (magnitude of Orion−Moon vector)
+  const dx = orion.x - moon.x;
+  const dy = orion.y - moon.y;
+  const dz = orion.z - moon.z;
+  const dMoonKm = Math.sqrt(dx**2 + dy**2 + dz**2);
+
+  // Speed
+  const speedKms = Math.sqrt(orion.vx**2 + orion.vy**2 + orion.vz**2);
+
+  const dEarthMi = dEarthKm * KM_TO_MI;
+  const dMoonMi  = Math.max(0, dMoonKm * KM_TO_MI);
+  const speedMph = speedKms * 3600 * KM_TO_MI;
+
+  return { dEarthMi, dMoonMi, speedMph, speedKms, fetchedAt: Date.now(), source: 'live' };
+}
+
+async function refreshLiveTelemetry() {
+  // Show estimated values immediately while fetch is in flight
+  const badge = document.getElementById('telemetry-source');
+  if (!liveTelemetry && badge) {
+    const ageMin = cachedTelemetry
+      ? Math.round((Date.now() - cachedTelemetry.fetchedAt) / 60000)
+      : null;
+    badge.textContent = ageMin !== null
+      ? `◌ Est · last live ${ageMin}m ago · fetching…`
+      : '◌ Est · fetching live data…';
+    badge.style.color = 'var(--muted)';
+    badge.classList.add('badge-loading');
+    const moonLabel = document.getElementById('s-moon-label');
+    if (moonLabel) moonLabel.textContent = 'To Moon Flyby';
+  }
+
+  try {
+    liveTelemetry = await fetchHorizons();
+    saveCachedTelemetry(liveTelemetry);
+    if (badge) {
+      badge.textContent = '● LIVE · JPL Horizons (Orion + Moon vectors)';
+      badge.style.color = 'var(--accent2)';
+      badge.classList.remove('badge-loading');
+    }
+    const moonLabel = document.getElementById('s-moon-label');
+    if (moonLabel) moonLabel.textContent = 'From Moon';
+  } catch(e) {
+    console.warn('Horizons fetch failed:', e.message);
+    try {
+      const orion = await fetchHorizonsVector('-1024');
+      const dEarthKm = Math.sqrt(orion.x**2 + orion.y**2 + orion.z**2);
+      const speedKms = Math.sqrt(orion.vx**2 + orion.vy**2 + orion.vz**2);
+      const dEarthMi = dEarthKm * KM_TO_MI;
+      liveTelemetry = {
+        dEarthMi,
+        dMoonMi: Math.max(0, FLYBY_EARTH_MOON_MI - dEarthMi),
+        speedMph: speedKms * 3600 * KM_TO_MI,
+        speedKms,
+        fetchedAt: Date.now(),
+        source: 'orion-only'
+      };
+      if (badge) {
+        badge.textContent = '◑ LIVE · Orion only · Moon est.';
+        badge.style.color = 'var(--gold)';
+        badge.classList.remove('badge-loading');
+      }
+      const moonLabel = document.getElementById('s-moon-label');
+      if (moonLabel) moonLabel.textContent = 'To Moon Flyby';
+    } catch(e2) {
+      console.warn('Orion-only fallback also failed:', e2.message);
+      if (badge) {
+        const src = cachedTelemetry || { fetchedAt: ANCHOR_TIME };
+        const ageMin = Math.round((Date.now() - src.fetchedAt) / 60000);
+        badge.textContent = `○ Est · dead-reckoned from ${ageMin}m ago`;
+        badge.style.color = 'var(--muted)';
+        badge.classList.remove('badge-loading');
+      }
+    }
   }
 }
 
+function calcOrion() {
+  const src = liveTelemetry || cachedTelemetry || {
+    dEarthMi: ANCHOR_EARTH,
+    dMoonMi: ANCHOR_MOON,
+    speedMph: ANCHOR_SPEED,
+    fetchedAt: ANCHOR_TIME,
+    source: cachedTelemetry ? 'cached' : 'anchor'
+  };
 
+  const telemetryState = getTelemetryState();
+  const elapsedH = (Date.now() - src.fetchedAt) / 3600000;
+  const speed = Math.max(1200, src.speedMph - elapsedH * DECEL_RATE);
+
+  let dEarth = src.dEarthMi;
+  let dMoon = src.dMoonMi;
+
+  if (telemetryState === 'cached' || telemetryState === 'anchor') {
+    dEarth = src.dEarthMi + speed * elapsedH;
+    dMoon = Math.max(0, src.dMoonMi - speed * elapsedH);
+  }
+
+  const speedKms = src.speedKms || null;
+  return {
+    dEarth: Math.round(dEarth),
+    dMoon: Math.round(Math.max(0, dMoon)),
+    speed: Math.round(speed),
+    speedKms,
+    telemetryState
+  };
+}
 
 function updateBanner() {
   const now = Date.now();
@@ -1001,34 +1162,6 @@ function updateClock() {
   const rm = Math.floor((rem % 3600000) / 60000);
   document.getElementById('countdown').textContent = `${rd}d ${pad(rh)}h ${pad(rm)}m`;
 
-  // ===== FLYBY COUNTDOWN =====
-  const flybyBlock  = document.getElementById('flyby-countdown-block');
-  const flybyDigits = document.getElementById('flyby-digits');
-  const flybySub    = document.getElementById('flyby-sub');
-  if (flybyBlock && flybyDigits && flybySub) {
-    const flybyMs = FLYBY - now;
-    if (flybyMs > 0) {
-      const fd = Math.floor(flybyMs / 86400000);
-      const fh = Math.floor((flybyMs % 86400000) / 3600000);
-      const fm = Math.floor((flybyMs % 3600000) / 60000);
-      const fs = Math.floor((flybyMs % 60000) / 1000);
-      flybyDigits.textContent = fd > 0
-        ? `${fd}d ${pad(fh)}h ${pad(fm)}m ${pad(fs)}s`
-        : `${pad(fh)}h ${pad(fm)}m ${pad(fs)}s`;
-      flybySub.textContent = 'until closest approach · ~4,047 mi above lunar far side';
-      flybyBlock.style.display = '';
-    } else if (flybyMs > -6 * 3600000) {
-      // during flyby window
-      flybyDigits.textContent = '🌕 FLYBY NOW';
-      flybyDigits.style.fontSize = '22px';
-      flybySub.textContent = 'Orion passing the Moon\'s far side';
-      flybyBlock.style.borderColor = 'rgba(245,166,35,0.7)';
-    } else {
-      // flyby complete — hide block
-      flybyBlock.style.display = 'none';
-    }
-  }
-
   const { dEarth, dMoon, speed, speedKms, telemetryState } = calcOrion();
   document.getElementById('s-earth').textContent = fmt(dEarth);
   document.getElementById('s-moon').textContent  = fmt(dMoon);
@@ -1046,7 +1179,7 @@ function updateClock() {
     }
   }
 
-  const pctToMoon = getMoonProgressPct(dEarth, dMoon);
+  const pctToMoon = getMoonProgressPct(dEarth, dMoon, telemetryState);
   document.getElementById('s-pct').textContent = pctToMoon + '%';
   document.getElementById('denier-distance').textContent = fmt(dMoon);
 
@@ -1055,9 +1188,13 @@ function updateClock() {
   const mPct = Math.min(98, Math.round((missionElap / missionTotal) * 100));
   document.getElementById('mission-prog').style.width = mPct + '%';
 
-  const distLabel = useMetric
-    ? `${Math.round(dEarth * MI_TO_KM).toLocaleString()} km from Earth`
-    : `${dEarth.toLocaleString()} mi from Earth`;
+  const distLabel = telemetryState === 'live'
+    ? (useMetric
+        ? `${Math.round(dEarth * MI_TO_KM).toLocaleString()} km from Earth`
+        : `${dEarth.toLocaleString()} mi from Earth`)
+    : (useMetric
+        ? `${Math.round(dEarth * MI_TO_KM).toLocaleString()} km est.`
+        : `${dEarth.toLocaleString()} mi est.`);
   document.getElementById('traj-pct').textContent = distLabel;
 
   updateBanner();
@@ -1126,7 +1263,7 @@ async function manualRefresh() {
 
 // Kick off live telemetry — fetch immediately, then every 2 minutes
 refreshLiveTelemetry();
-// trajectory is embedded — no polling needed
+setInterval(refreshLiveTelemetry, 2 * 60 * 1000);
 
 updateClock();
 drawTrajectory();
@@ -1301,163 +1438,51 @@ function renderActivities() {
 
 // ===== DYNAMIC PHOTO GALLERY =====
 // Known Artemis II photos as fallback (newest first)
-const KNOWN_PHOTOS = [
-  // Day 4 photos (Apr 4)
-  { id: 'art002m1010940907', title: 'Orion pointed straight at the Moon', credit: 'NASA · Apr 4 · Day 4', link: 'https://www.nasa.gov/gallery/journey-to-the-moon/' },
-  { id: 'art002e009007',     title: 'Wiseman peers out of Orion window', credit: 'NASA · Apr 4 · Day 4', link: 'https://www.nasa.gov/gallery/journey-to-the-moon/' },
-  { id: 'art002e008487',     title: 'Koch peers out of Orion window', credit: 'NASA · Apr 4 · Day 4', link: 'https://www.nasa.gov/gallery/journey-to-the-moon/' },
-  { id: 'art002e008486',     title: 'Wiseman at Orion window — Day 4', credit: 'NASA · Apr 4', link: 'https://www.nasa.gov/gallery/journey-to-the-moon/' },
-  // Day 3 photos (Apr 3)
-  { id: 'art002e004440',     title: 'Koch illuminated by screen inside Orion', credit: 'NASA · Apr 3 · Day 3', link: 'https://www.nasa.gov/gallery/journey-to-the-moon/' },
-  { id: 'art002e004439',     title: 'Hansen working inside Orion', credit: 'NASA · Apr 3 · Day 3', link: 'https://www.nasa.gov/gallery/journey-to-the-moon/' },
-  { id: 'art002e004438',     title: 'Moon through Orion window', credit: 'Artemis II crew · Apr 3', link: 'https://www.nasa.gov/gallery/journey-to-the-moon/' },
-  { id: 'art002e004357',     title: 'Orion selfie in deep space', credit: 'NASA · Apr 3 · Day 3', link: 'https://www.nasa.gov/gallery/journey-to-the-moon/' },
-  { id: 'art002e000193',     title: 'Backlit Earth — nightside glow', credit: 'Wiseman · Apr 3', link: 'https://www.nasa.gov/image-detail/amf-art002e000193/' },
-  { id: 'art002e000192',     title: 'Earth — aurora + zodiacal light', credit: 'Wiseman · Apr 2', link: 'https://www.nasa.gov/image-article/hello-world/' },
-  { id: 'art002e000191',     title: 'Pale blue dot through Orion window', credit: 'Wiseman · Apr 3', link: 'https://www.nasa.gov/image-detail/amf-art002e000191/' },
-  { id: 'art002e000190',     title: 'Earth — day/night terminator line', credit: 'Wiseman · Apr 3', link: 'https://www.nasa.gov/image-detail/amf-art002e000190/' },
+const ALL_PHOTOS = [
+  { src: 'https://images-assets.nasa.gov/image/art002m1010940907/art002m1010940907~thumb.jpg', title: 'Orion pointed straight at the Moon', credit: 'NASA \u00b7 Apr 4 \u00b7 Day 4', link: 'https://www.nasa.gov/gallery/journey-to-the-moon/' },
+  { src: 'https://images-assets.nasa.gov/image/art002e009007/art002e009007~thumb.jpg', title: 'Wiseman peers out of Orion window', credit: 'NASA \u00b7 Apr 4 \u00b7 Day 4', link: 'https://www.nasa.gov/gallery/journey-to-the-moon/' },
+  { src: 'https://images-assets.nasa.gov/image/art002e008487/art002e008487~thumb.jpg', title: 'Koch peers out of Orion window', credit: 'NASA \u00b7 Apr 4 \u00b7 Day 4', link: 'https://www.nasa.gov/gallery/journey-to-the-moon/' },
+  { src: 'https://images-assets.nasa.gov/image/art002e008486/art002e008486~thumb.jpg', title: 'Wiseman at Orion window \u2014 Day 4', credit: 'NASA \u00b7 Apr 4 \u00b7 Day 4', link: 'https://www.nasa.gov/gallery/journey-to-the-moon/' },
+  { src: 'https://www.nasa.gov/wp-content/uploads/2026/04/artemis-ii-crew-inside-orion-7.jpg', title: 'Full crew inside Orion "Integrity"', credit: 'NASA \u00b7 Apr 2 \u00b7 Day 2 downlink', link: 'https://www.nasa.gov/image-detail/artemis-ii-crew-inside-orion-7/' },
+  { src: 'https://images-assets.nasa.gov/image/art002e000192/art002e000192~large.jpg', title: 'Earth \u2014 aurora + zodiacal light', credit: 'Wiseman \u00b7 Apr 2 \u00b7 post-TLI', link: 'https://www.nasa.gov/image-detail/fd02_for-pao/' },
+  { src: 'https://images-assets.nasa.gov/image/art002e000193/art002e000193~large.jpg', title: 'Backlit Earth \u2014 nightside glow', credit: 'Wiseman \u00b7 Apr 3 \u00b7 Day 3', link: 'https://www.nasa.gov/image-detail/amf-art002e000193/' },
+  { src: 'https://images-assets.nasa.gov/image/art002e000191/art002e000191~large.jpg', title: 'Pale blue dot through Orion window', credit: 'Wiseman \u00b7 Apr 3 \u00b7 Day 3', link: 'https://www.nasa.gov/image-detail/amf-art002e000191/' },
+  { src: 'https://images-assets.nasa.gov/image/art002e000190/art002e000190~large.jpg', title: 'Earth \u2014 day/night terminator line', credit: 'Wiseman \u00b7 Apr 3 \u00b7 Day 3', link: 'https://www.nasa.gov/image-detail/amf-art002e000190/' },
+  { src: 'https://images-assets.nasa.gov/image/art002e004357/art002e004357~thumb.jpg', title: 'Orion selfie in deep space', credit: 'NASA \u00b7 Apr 3 \u00b7 Day 3', link: 'https://www.nasa.gov/gallery/journey-to-the-moon/' },
+  { src: 'https://images-assets.nasa.gov/image/art002e004438/art002e004438~thumb.jpg', title: 'Moon through Orion window', credit: 'Artemis II crew \u00b7 Apr 3', link: 'https://www.nasa.gov/gallery/journey-to-the-moon/' },
+  { src: 'https://www.nasa.gov/wp-content/uploads/2026/04/55182696113-0c4398702d-o-2.jpg', title: 'SLS lifts off from LC-39B', credit: 'NASA \u00b7 Apr 1 \u00b7 18:35 CST', link: 'https://www.nasa.gov/gallery/artemis-ii-launch/' },
+  { src: 'https://www.nasa.gov/wp-content/uploads/2026/04/55181686977-7e768c5ab5-o.jpg', title: 'SLS launch trail \u2014 3 min exposure', credit: 'NASA \u00b7 Apr 1', link: 'https://www.nasa.gov/image-detail/artemis-ii-launch-15/' },
+  { src: 'https://www.nasa.gov/wp-content/uploads/2026/04/55182911054-439d1926bf-o.jpg', title: 'SLS ascending \u2014 engine plume', credit: 'NASA/Joel Kowsky \u00b7 Apr 1', link: 'https://www.nasa.gov/image-detail/artemis-ii-launch-9/' },
 ];
 
-// Non-API photos with explicit dates so they can be sorted with API results
-const STATIC_PHOTOS = [
-  { src: 'https://www.nasa.gov/wp-content/uploads/2026/04/artemis-ii-crew-inside-orion-7.jpg', title: 'Crew inside Orion "Integrity"', credit: 'NASA · Apr 2 downlink', link: 'https://www.nasa.gov/image-detail/artemis-ii-crew-inside-orion-7/', emoji: '👨‍🚀', date: '2026-04-02T18:00:00Z' },
-  { src: 'https://www.nasa.gov/wp-content/uploads/2026/04/55182696113-0c4398702d-o-2.jpg', title: 'SLS lifts off from LC-39B', credit: 'NASA · Apr 1 · 18:35 CST', link: 'https://www.nasa.gov/gallery/artemis-ii-launch/', emoji: '🚀', date: '2026-04-01T23:35:00Z' },
-  { src: 'https://www.nasa.gov/wp-content/uploads/2026/04/55181686977-7e768c5ab5-o.jpg', title: 'SLS launch trail — 3 min exposure', credit: 'NASA · Apr 1 · 18:35 CST', link: 'https://www.nasa.gov/image-detail/artemis-ii-launch-15/', emoji: '✨', date: '2026-04-01T23:36:00Z' },
-  { src: 'https://www.nasa.gov/wp-content/uploads/2026/04/55182911054-439d1926bf-o.jpg', title: 'SLS ascending — engine plume', credit: 'NASA/Joel Kowsky · Apr 1', link: 'https://www.nasa.gov/image-detail/artemis-ii-launch-9/', emoji: '🔥', date: '2026-04-01T23:37:00Z' },
-];
-
-function makePhotoCard(src, title, credit, link, emoji) {
-  return `<a href="${link}" target="_blank" style="text-decoration:none;color:inherit;">
-    <div class="photo-card" style="cursor:pointer;">
-      <img src="${src}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"
-           alt="${title}" style="width:100%;height:140px;object-fit:cover;display:block;">
-      <div style="display:none;height:140px;background:#0c1628;align-items:center;justify-content:center;flex-direction:column;gap:6px;">
-        <div style="font-size:22px;">${emoji || '🛸'}</div>
-        <div style="font-size:10px;color:#6a7a94;font-family:monospace;text-align:center;">${title}<br><span style="color:#4da8ff;">View on NASA ↗</span></div>
-      </div>
-      <div class="photo-info">
-        <div class="photo-title">${title}</div>
-        <div class="photo-credit">${credit} · nasa.gov ↗</div>
-      </div>
-    </div>
-  </a>`;
+function makePhotoCard(src, title, credit, link) {
+  return `<a href="${link}" target="_blank" style="text-decoration:none;color:inherit;flex-shrink:0;"><div class="photo-card" style="cursor:pointer;"><img src="${src}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" alt="${title}" style="width:100%;height:140px;object-fit:cover;display:block;"><div style="display:none;height:140px;background:#0c1628;align-items:center;justify-content:center;flex-direction:column;gap:6px;"><div style="font-size:22px;">&#x1F6F8;</div><div style="font-size:10px;color:#6a7a94;font-family:monospace;text-align:center;">${title}<br><span style="color:#4da8ff;">View on NASA &#x2197;</span></div></div><div class="photo-info"><div class="photo-title">${title}</div><div class="photo-credit">${credit} &middot; nasa.gov &#x2197;</div></div></div></a>`;
 }
 
 function makeViewAllCard() {
-  return `<a href="https://www.nasa.gov/gallery/journey-to-the-moon/" target="_blank" style="text-decoration:none;flex-shrink:0;">
-    <div class="photo-card" style="background:var(--bg3);border:1px solid var(--border);display:flex;flex-direction:column;justify-content:center;align-items:center;min-height:200px;width:200px;border-radius:10px;cursor:pointer;">
-      <div style="font-size:28px;margin-bottom:8px;">📡</div>
-      <div style="font-size:12px;color:var(--muted);text-align:center;padding:0 16px;line-height:1.5;">See full NASA gallery</div>
-      <div style="margin-top:10px;font-size:11px;color:var(--accent);font-family:var(--mono);">nasa.gov ↗</div>
-    </div>
-  </a>`;
+  return `<a href="https://www.nasa.gov/gallery/journey-to-the-moon/" target="_blank" style="text-decoration:none;flex-shrink:0;"><div class="photo-card" style="background:var(--bg3);border:1px solid var(--border);display:flex;flex-direction:column;justify-content:center;align-items:center;min-height:200px;width:180px;border-radius:10px;cursor:pointer;"><div style="font-size:28px;margin-bottom:8px;">&#x1F4E1;</div><div style="font-size:12px;color:var(--muted);text-align:center;padding:0 16px;line-height:1.5;">See full NASA gallery</div><div style="margin-top:10px;font-size:11px;color:var(--accent);font-family:var(--mono);">nasa.gov &#x2197;</div></div></a>`;
 }
 
 async function loadGallery() {
   const scroll = document.getElementById('gallery-scroll');
   const header = document.getElementById('gallery-header');
-
-  try {
-    // NASA Images API — search for Artemis II, sorted by date descending
-    const url = 'https://images-api.nasa.gov/search?q=artemis+II&media_type=image&year_start=2026';
-    const res = await fetch(url);
-    const data = await res.json();
-    const items = data.collection.items;
-
-    if (!items || items.length === 0) throw new Error('No results');
-
-    // Filter to mission photos only (exclude renders/graphics by checking for 'art002' in nasa_id or keywords)
-    const missionPhotos = items
-      .filter(item => {
-        const d = item.data?.[0] || {};
-        const id = (d.nasa_id || '').toLowerCase();
-        const title = (d.title || '').toLowerCase();
-        const desc = (d.description || '').toLowerCase();
-        return id.includes('art002') ||
-               title.includes('artemis') ||
-               desc.includes('artemis') ||
-               desc.includes('orion');
-      })
-      .map(item => {
-        const d = item.data?.[0] || {};
-        return {
-          src: item.links?.[0]?.href,
-          title: d.title || 'Artemis II photo',
-          credit: ((d.photographer ? d.photographer + ' · ' : '') +
-            (d.date_created
-              ? new Date(d.date_created).toLocaleDateString('en-US', {
-                  month: 'short',
-                  day: 'numeric'
-                })
-              : '')),
-          link: `https://images.nasa.gov/details/${d.nasa_id || ''}`,
-          emoji: '🛸',
-          date: d.date_created || '1970-01-01T00:00:00Z'
-        };
-      })
-      .filter(photo => photo.src);
-
-    if (missionPhotos.length === 0) throw new Error('No mission photos found');
-
-    // Build cards from API + static photos, sorted newest first
-    const allPhotos = [...missionPhotos, ...STATIC_PHOTOS]
-      .sort((a, b) => new Date(b.date) - new Date(a.date))
-      .slice(0, 12);
-
-    let html = '';
-    let latestDate = '';
-
-    for (const photo of allPhotos) {
-      if (!latestDate && photo.date) {
-        latestDate = new Date(photo.date).toLocaleDateString('en-US', {
-          month: 'short',
-          day: 'numeric'
-        });
-      }
-      html += makePhotoCard(photo.src, photo.title, photo.credit, photo.link, photo.emoji);
-    }
-
-    html += makeViewAllCard();
-
-    scroll.innerHTML = html;
-    header.textContent = `Photos from Orion · Latest: ${latestDate || 'Apr 4'} · Auto-updating`;
-
-  } catch (e) {
-    // API failed — fall back to known photos using images-assets.nasa.gov
-    let html = '';
-    for (const p of KNOWN_PHOTOS) {
-      const src = `https://images-assets.nasa.gov/image/${p.id}/${p.id}~thumb.jpg`;
-      html += makePhotoCard(src, p.title, p.credit, p.link, '🛸');
-    }
-    for (const p of STATIC_PHOTOS) {
-      html += makePhotoCard(p.src, p.title, p.credit, p.link, p.emoji);
-    }
-    html += makeViewAllCard();
-    scroll.innerHTML = html;
-    header.textContent = 'Photos from Orion · Apr 3–4 · nasa.gov';
-  }
+  if (!scroll) return;
+  scroll.innerHTML = ALL_PHOTOS.map(p => makePhotoCard(p.src, p.title, p.credit, p.link)).join('') + makeViewAllCard();
+  if (header) header.textContent = 'Photos from Orion \u00b7 Days 1\u20134 \u00b7 nasa.gov \u00b7 NASA publishes with ~1 day delay';
 }
 
 async function refreshGallery() {
   const btn    = document.getElementById('gallery-refresh-btn');
   const icon   = document.getElementById('gallery-refresh-icon');
-  const header = document.getElementById('gallery-header');
-  const scroll = document.getElementById('gallery-scroll');
   if (btn && btn.disabled) return;
-  if (btn)    btn.disabled = true;
-  if (icon)   icon.style.animation = 'spin 0.8s linear infinite';
-  if (header) header.textContent = 'Photos from Orion · Refreshing…';
-  if (scroll) scroll.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;width:100%;padding:30px 0;font-family:var(--mono);font-size:11px;color:var(--muted);">Fetching latest NASA photos…</div>';
-  try {
-    await loadGallery();
-  } finally {
-    if (btn)  btn.disabled = false;
-    if (icon) icon.style.animation = '';
-  }
+  if (btn)  btn.disabled = true;
+  if (icon) icon.style.animation = 'spin 0.8s linear infinite';
+  await loadGallery();
+  if (btn)  btn.disabled = false;
+  if (icon) icon.style.animation = '';
 }
 
 loadGallery();
-setInterval(loadGallery, 10 * 60 * 1000); // refresh photos every 10 minutes
 
 renderActivities();
 setInterval(renderActivities, 60000); // refresh every minute
