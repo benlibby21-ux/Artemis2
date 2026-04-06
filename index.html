@@ -860,7 +860,11 @@ function pad(n,w=2){return String(Math.floor(n)).padStart(w,"0");}
 const FLYBY_EARTH_MOON_MI = 251639;
 const FLYBY_EARTH_MOON_KM = Math.round(FLYBY_EARTH_MOON_MI / KM_TO_MI);
 const STORAGE_KEY = 'artemis2_telemetry_v3';
-const JPL_BASE = 'https://ssd.jpl.nasa.gov/api/horizons.api';
+// Direct JPL URL — works if page has permissive CSP (e.g. localhost dev)
+// Falls back to corsproxy.io if blocked by Content Security Policy
+const JPL_DIRECT = 'https://ssd.jpl.nasa.gov/api/horizons.api';
+const JPL_PROXY  = 'https://corsproxy.io/?' + encodeURIComponent('https://ssd.jpl.nasa.gov/api/horizons.api');
+const JPL_BASE   = JPL_PROXY; // use proxy by default (GitHub Pages CSP blocks direct)
 const FETCH_INTERVAL_MS = 2 * 60 * 1000; // 2 minutes
 
 // Live state — populated by JPL fetches, interpolated every second
@@ -916,27 +920,7 @@ const TRAJ = [
 // ===== JPL HORIZONS FETCH =====
 // Fetches a 4-hour window of state vectors (Orion + Moon) centered on now.
 // Uses VECTORS ephemeris type with Earth as center — gives raw XYZ in km.
-function jplUrl(command, start, stop) {
-  const params = new URLSearchParams({
-    format: 'text',
-    COMMAND: command,
-    OBJ_DATA: 'NO',
-    MAKE_EPHEM: 'YES',
-    EPHEM_TYPE: 'VECTORS',
-    CENTER: '500@399',   // Earth geocenter
-    START_TIME: start,
-    STOP_TIME: stop,
-    STEP_SIZE: '10m',    // 10-minute intervals → 24 rows per 4h window
-    VEC_TABLE: '2',      // X Y Z VX VY VZ LT RG RR
-    OUT_UNITS: 'KM-S',
-    REF_SYSTEM: 'J2000',
-    VEC_LABELS: 'NO',
-    CSV_FORMAT: 'YES',
-  });
-  return `${JPL_BASE}?${params.toString()}`;
-}
-
-// Parse JPL VECTORS CSV output → [{tMs, x, y, z, vx, vy, vz, rg}]
+// jplDate helper — formats a Date for JPL START_TIME/STOP_TIME params
 function parseJplVectors(text) {
   const rows = [];
   const lines = text.split('\n');
@@ -1024,31 +1008,53 @@ function jplDate(d) {
   return `${Y}-${Mo}-${D} ${H}:${Mi}`;
 }
 
+async function fetchJplPair(baseUrl, start, stop) {
+  // Build URLs with this base (direct or proxy)
+  function url(command) {
+    const params = new URLSearchParams({
+      format: 'text', COMMAND: command, OBJ_DATA: 'NO', MAKE_EPHEM: 'YES',
+      EPHEM_TYPE: 'VECTORS', CENTER: '500@399',
+      START_TIME: start, STOP_TIME: stop, STEP_SIZE: '10m',
+      VEC_TABLE: '2', OUT_UNITS: 'KM-S', REF_SYSTEM: 'J2000',
+      VEC_LABELS: 'NO', CSV_FORMAT: 'YES',
+    });
+    return `${baseUrl}?${params.toString()}`;
+  }
+  const [orionResp, moonResp] = await Promise.all([
+    fetch(url("'-1024'")), fetch(url("'301'")),
+  ]);
+  if (!orionResp.ok || !moonResp.ok) throw new Error(`HTTP ${orionResp.status}/${moonResp.status}`);
+  const [orionText, moonText] = await Promise.all([orionResp.text(), moonResp.text()]);
+  const orionRows = parseJplVectors(orionText);
+  const moonRows  = parseJplVectors(moonText);
+  if (orionRows.length === 0) throw new Error('No Orion vectors in response — check COMMAND=-1024');
+  if (moonRows.length  === 0) throw new Error('No Moon vectors in response');
+  return { orionRows, moonRows };
+}
+
 async function fetchJPL() {
-  // Fetch a window: 30 min before now to 3.5 hours ahead
-  const now  = new Date();
-  const t0   = new Date(now.getTime() - 30 * 60000);
-  const t1   = new Date(now.getTime() + 210 * 60000);
+  const now   = new Date();
+  const t0    = new Date(now.getTime() - 30 * 60000);
+  const t1    = new Date(now.getTime() + 210 * 60000);
   const start = jplDate(t0);
   const stop  = jplDate(t1);
 
-  const [orionResp, moonResp] = await Promise.all([
-    fetch(jplUrl("'-1024'", start, stop)),
-    fetch(jplUrl("'301'",   start, stop)),
-  ]);
+  let orionRows, moonRows;
 
-  if (!orionResp.ok || !moonResp.ok) throw new Error('JPL fetch failed');
-  const [orionText, moonText] = await Promise.all([orionResp.text(), moonResp.text()]);
-
-  const orionRows = parseJplVectors(orionText);
-  const moonRows  = parseJplVectors(moonText);
-
-  if (orionRows.length === 0) throw new Error('No Orion data in JPL response');
-  if (moonRows.length  === 0) throw new Error('No Moon data in JPL response');
+  // Try direct first (works on localhost / permissive CSP)
+  try {
+    ({ orionRows, moonRows } = await fetchJplPair(JPL_DIRECT, start, stop));
+    console.log('[JPL] Direct fetch OK');
+  } catch(directErr) {
+    console.warn('[JPL] Direct blocked, trying proxy:', directErr.message);
+    // Fall back to corsproxy.io
+    ({ orionRows, moonRows } = await fetchJplPair(JPL_PROXY, start, stop));
+    console.log('[JPL] Proxy fetch OK');
+  }
 
   liveTable = buildLiveTable(orionRows, moonRows);
+  console.log(`[JPL] liveTable has ${liveTable.length} rows, first:`, liveTable[0]);
 
-  // Persist to sessionStorage so page reloads don't re-fetch immediately
   try {
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ fetchedAt: Date.now(), table: liveTable }));
   } catch(e) {}
