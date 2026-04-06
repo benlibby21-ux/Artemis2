@@ -852,30 +852,24 @@ function pad(n,w=2){return String(Math.floor(n)).padStart(w,"0");}
 
 
 
-// ===== PERSISTED ANCHOR =====
-// On startup, load the last successful live fetch from localStorage.
-// This is used as the dead-reckoning baseline instead of the hardcoded Apr 4 anchor,
-// so estimates are accurate even hours after the last page load.
-const STORAGE_KEY = 'artemis2_telemetry_v1';
+// ===== LIVE JPL HORIZONS TELEMETRY ENGINE =====
+// Fetches real state vectors from JPL Horizons for Orion (-1024) and Moon (301).
+// Distances are computed from actual XYZ position vectors — no guessing.
+// Falls back to interpolated TRAJ table if JPL is unreachable.
 
-function loadCachedTelemetry() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const t = JSON.parse(raw);
-    // Sanity check — discard if older than 24h or missing fields
-    if (!t.fetchedAt || !t.dEarthMi || (Date.now() - t.fetchedAt) > 86400000) return null;
-    return t;
-  } catch(e) { return null; }
-}
+const FLYBY_EARTH_MOON_MI = 251639;
+const FLYBY_EARTH_MOON_KM = Math.round(FLYBY_EARTH_MOON_MI / KM_TO_MI);
+const STORAGE_KEY = 'artemis2_telemetry_v3';
+const JPL_BASE = 'https://ssd.jpl.nasa.gov/api/horizons.api';
+const FETCH_INTERVAL_MS = 2 * 60 * 1000; // 2 minutes
 
-function saveCachedTelemetry(t) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(t)); } catch(e) {}
-}
+// Live state — populated by JPL fetches, interpolated every second
+let liveTable = []; // [{tMs, dEarthKm, dMoonKm, speedKms}] sorted by tMs
+let liveLastFetch = 0;
+let liveFetchOk = false;
 
-// ===== PRE-EMBEDDED JPL HORIZONS TRAJECTORY =====
+// ===== FALLBACK TRAJECTORY TABLE =====
 // Rows: [utcMs, dEarthMi, dMoonMi, speedMph, speedKms]
-// Anchored to NASA AROW screenshots — update by sending new screenshot
 const TRAJ = [
   [new Date('2026-04-01T22:35:00Z').getTime(),  3959, 238801, 17500, 7.820],
   [new Date('2026-04-02T04:00:00Z').getTime(),  8200, 234600, 14200, 6.350],
@@ -893,35 +887,207 @@ const TRAJ = [
   [new Date('2026-04-05T04:00:00Z').getTime(),214000,  42000,  2050, 0.920],
   [new Date('2026-04-05T10:00:00Z').getTime(),220000,  36000,  1820, 0.810],
   [new Date('2026-04-05T16:00:00Z').getTime(),224000,  31500,  1640, 0.730],
-  [new Date('2026-04-05T20:42:00Z').getTime(),221444,  55920,  1537, 0.687],  // NASA AROW screenshot
-  [new Date('2026-04-05T23:51:00Z').getTime(),226050,  49632,  1465, 0.655],  // NASA AROW screenshot
+  [new Date('2026-04-05T20:42:00Z').getTime(),221444,  55920,  1537, 0.687],
+  [new Date('2026-04-05T23:51:00Z').getTime(),226050,  49632,  1465, 0.655],
   [new Date('2026-04-06T02:00:00Z').getTime(),228000,  44000,  1430, 0.640],
   [new Date('2026-04-06T06:00:00Z').getTime(),231000,  35000,  1390, 0.622],
-  [new Date('2026-04-06T10:00:00Z').getTime(),233500,  25000,  1420, 0.635],
-  [new Date('2026-04-06T13:00:00Z').getTime(),235000,  16000,  1600, 0.715],
-  [new Date('2026-04-06T15:00:00Z').getTime(),235600,   7800,  2100, 0.939],
-  [new Date('2026-04-06T17:00:00Z').getTime(),235800,   4047,  3200, 1.431],  // closest approach
-  [new Date('2026-04-06T19:00:00Z').getTime(),235200,   7500,  2800, 1.252],
-  [new Date('2026-04-06T23:00:00Z').getTime(),232000,  14000,  2200, 0.984],
-  [new Date('2026-04-07T06:00:00Z').getTime(),225000,  22000,  3800, 1.700],
-  [new Date('2026-04-07T12:00:00Z').getTime(),216000,  32000,  4200, 1.878],
-  [new Date('2026-04-07T18:00:00Z').getTime(),205000,  45000,  4600, 2.057],
-  [new Date('2026-04-08T00:00:00Z').getTime(),192000,  60000,  5000, 2.236],
-  [new Date('2026-04-08T06:00:00Z').getTime(),177000,  76000,  5400, 2.414],
-  [new Date('2026-04-08T12:00:00Z').getTime(),160000,  93000,  5900, 2.637],
-  [new Date('2026-04-08T18:00:00Z').getTime(),141000, 111000,  6500, 2.906],
-  [new Date('2026-04-09T00:00:00Z').getTime(),121000, 130000,  7200, 3.219],
-  [new Date('2026-04-09T06:00:00Z').getTime(), 99000, 150000,  8100, 3.621],
-  [new Date('2026-04-09T12:00:00Z').getTime(), 76000, 171000,  9300, 4.158],
-  [new Date('2026-04-09T18:00:00Z').getTime(), 52000, 193000, 11000, 4.918],
-  [new Date('2026-04-10T00:00:00Z').getTime(), 28000, 214000, 14000, 6.258],
-  [new Date('2026-04-10T06:00:00Z').getTime(), 12000, 228000, 18500, 8.273],
-  [new Date('2026-04-10T12:00:00Z').getTime(),  3500, 236000, 24000,10.733],
+  [new Date('2026-04-06T10:00:00Z').getTime(),237000,  19000,  1150, 0.514],
+  [new Date('2026-04-06T14:00:00Z').getTime(),239000,   8000,  1500, 0.671],
+  [new Date('2026-04-06T17:00:00Z').getTime(),238600,   4070,  3600, 1.610],  // closest approach
+  [new Date('2026-04-06T20:00:00Z').getTime(),237000,   8000,  3000, 1.341],
+  [new Date('2026-04-07T00:00:00Z').getTime(),233000,  16000,  2400, 1.073],
+  [new Date('2026-04-07T06:00:00Z').getTime(),225000,  24000,  3800, 1.700],
+  [new Date('2026-04-07T12:00:00Z').getTime(),216000,  34000,  4200, 1.878],
+  [new Date('2026-04-07T18:00:00Z').getTime(),205000,  47000,  4600, 2.057],
+  [new Date('2026-04-08T00:00:00Z').getTime(),192000,  62000,  5000, 2.236],
+  [new Date('2026-04-08T06:00:00Z').getTime(),177000,  78000,  5400, 2.414],
+  [new Date('2026-04-08T12:00:00Z').getTime(),160000,  95000,  5900, 2.637],
+  [new Date('2026-04-08T18:00:00Z').getTime(),141000, 113000,  6500, 2.906],
+  [new Date('2026-04-09T00:00:00Z').getTime(),121000, 132000,  7200, 3.219],
+  [new Date('2026-04-09T06:00:00Z').getTime(), 99000, 152000,  8100, 3.621],
+  [new Date('2026-04-09T12:00:00Z').getTime(), 76000, 173000,  9300, 4.158],
+  [new Date('2026-04-09T18:00:00Z').getTime(), 52000, 195000, 11000, 4.918],
+  [new Date('2026-04-10T00:00:00Z').getTime(), 28000, 216000, 14000, 6.258],
+  [new Date('2026-04-10T06:00:00Z').getTime(), 12000, 229000, 18500, 8.273],
+  [new Date('2026-04-10T12:00:00Z').getTime(),  3500, 237000, 24000,10.733],
   [new Date('2026-04-10T18:21:00Z').getTime(),     0, 238900,     0, 0.000],
 ];
 
+// ===== JPL HORIZONS FETCH =====
+// Fetches a 4-hour window of state vectors (Orion + Moon) centered on now.
+// Uses VECTORS ephemeris type with Earth as center — gives raw XYZ in km.
+function jplUrl(command, start, stop) {
+  const params = new URLSearchParams({
+    format: 'text',
+    COMMAND: command,
+    OBJ_DATA: 'NO',
+    MAKE_EPHEM: 'YES',
+    EPHEM_TYPE: 'VECTORS',
+    CENTER: '500@399',   // Earth geocenter
+    START_TIME: start,
+    STOP_TIME: stop,
+    STEP_SIZE: '10m',    // 10-minute intervals → 24 rows per 4h window
+    VEC_TABLE: '2',      // X Y Z VX VY VZ LT RG RR
+    OUT_UNITS: 'KM-S',
+    REF_SYSTEM: 'J2000',
+    VEC_LABELS: 'NO',
+    CSV_FORMAT: 'YES',
+  });
+  return `${JPL_BASE}?${params.toString()}`;
+}
+
+// Parse JPL VECTORS CSV output → [{tMs, x, y, z, vx, vy, vz, rg}]
+function parseJplVectors(text) {
+  const rows = [];
+  const lines = text.split('\n');
+  let inData = false;
+  for (const line of lines) {
+    const t = line.trim();
+    if (t === '$$SOE') { inData = true; continue; }
+    if (t === '$$EOE') break;
+    if (!inData) continue;
+    // CSV row: JDTDB, CalendarDate(TDB), X, Y, Z, VX, VY, VZ, LT, RG, RR
+    const cols = t.split(',').map(s => s.trim());
+    if (cols.length < 9) continue;
+    const jd = parseFloat(cols[0]);
+    if (isNaN(jd)) continue;
+    // JD to Unix ms: (JD - 2440587.5) * 86400000
+    const tMs = (jd - 2440587.5) * 86400000;
+    const x  = parseFloat(cols[2]);
+    const y  = parseFloat(cols[3]);
+    const z  = parseFloat(cols[4]);
+    const vx = parseFloat(cols[5]);
+    const vy = parseFloat(cols[6]);
+    const vz = parseFloat(cols[7]);
+    const rg = parseFloat(cols[9]); // range from Earth center in km
+    if (!isNaN(tMs) && !isNaN(rg)) {
+      rows.push({ tMs, x, y, z, vx, vy, vz, rg });
+    }
+  }
+  return rows;
+}
+
+// Build a merged liveTable entry list from parallel Orion + Moon fetches
+function buildLiveTable(orionRows, moonRows) {
+  // For each Orion row, interpolate Moon position at same timestamp
+  const table = [];
+  for (const o of orionRows) {
+    // Find nearest Moon row by time
+    let moon = moonRows[0];
+    let bestDt = Infinity;
+    for (const m of moonRows) {
+      const dt = Math.abs(m.tMs - o.tMs);
+      if (dt < bestDt) { bestDt = dt; moon = m; }
+    }
+    // Distance Orion–Earth (km)
+    const dEarthKm = o.rg;
+    // Distance Orion–Moon (km): vector from Moon to Orion
+    const dx = o.x - moon.x;
+    const dy = o.y - moon.y;
+    const dz = o.z - moon.z;
+    const dMoonKm = Math.sqrt(dx*dx + dy*dy + dz*dz);
+    // Speed (km/s)
+    const speedKms = Math.sqrt(o.vx*o.vx + o.vy*o.vy + o.vz*o.vz);
+    table.push({ tMs: o.tMs, dEarthKm, dMoonKm, speedKms });
+  }
+  table.sort((a, b) => a.tMs - b.tMs);
+  return table;
+}
+
+// Interpolate live table at a given timestamp
+function interpLiveTable(tMs) {
+  if (liveTable.length === 0) return null;
+  if (tMs <= liveTable[0].tMs) return liveTable[0];
+  if (tMs >= liveTable[liveTable.length-1].tMs) return liveTable[liveTable.length-1];
+  let lo = 0, hi = liveTable.length - 1;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (liveTable[mid].tMs <= tMs) lo = mid; else hi = mid;
+  }
+  const a = liveTable[lo], b = liveTable[hi];
+  const f = (tMs - a.tMs) / (b.tMs - a.tMs);
+  return {
+    dEarthKm: a.dEarthKm + (b.dEarthKm - a.dEarthKm) * f,
+    dMoonKm:  a.dMoonKm  + (b.dMoonKm  - a.dMoonKm)  * f,
+    speedKms: a.speedKms + (b.speedKms  - a.speedKms)  * f,
+  };
+}
+
+// Format a UTC Date as JPL accepts: 'YYYY-Mon-DD HH:MM'
+function jplDate(d) {
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const Y  = d.getUTCFullYear();
+  const Mo = months[d.getUTCMonth()];
+  const D  = String(d.getUTCDate()).padStart(2,'0');
+  const H  = String(d.getUTCHours()).padStart(2,'0');
+  const Mi = String(d.getUTCMinutes()).padStart(2,'0');
+  return `${Y}-${Mo}-${D} ${H}:${Mi}`;
+}
+
+async function fetchJPL() {
+  // Fetch a window: 30 min before now to 3.5 hours ahead
+  const now  = new Date();
+  const t0   = new Date(now.getTime() - 30 * 60000);
+  const t1   = new Date(now.getTime() + 210 * 60000);
+  const start = jplDate(t0);
+  const stop  = jplDate(t1);
+
+  const [orionResp, moonResp] = await Promise.all([
+    fetch(jplUrl("'-1024'", start, stop)),
+    fetch(jplUrl("'301'",   start, stop)),
+  ]);
+
+  if (!orionResp.ok || !moonResp.ok) throw new Error('JPL fetch failed');
+  const [orionText, moonText] = await Promise.all([orionResp.text(), moonResp.text()]);
+
+  const orionRows = parseJplVectors(orionText);
+  const moonRows  = parseJplVectors(moonText);
+
+  if (orionRows.length === 0) throw new Error('No Orion data in JPL response');
+  if (moonRows.length  === 0) throw new Error('No Moon data in JPL response');
+
+  liveTable = buildLiveTable(orionRows, moonRows);
+
+  // Persist to sessionStorage so page reloads don't re-fetch immediately
+  try {
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ fetchedAt: Date.now(), table: liveTable }));
+  } catch(e) {}
+}
+
+function loadSessionCache() {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) return false;
+    const { fetchedAt, table } = JSON.parse(raw);
+    // Use cache if younger than 3 minutes
+    if (Date.now() - fetchedAt < 3 * 60000 && Array.isArray(table) && table.length > 0) {
+      liveTable = table;
+      liveLastFetch = fetchedAt;
+      return true;
+    }
+  } catch(e) {}
+  return false;
+}
+
+// ===== MAIN TELEMETRY CALCULATION =====
 function calcOrion() {
   const now = Date.now();
+  const live = interpLiveTable(now);
+
+  if (live) {
+    const dEarthMi = live.dEarthKm * KM_TO_MI;
+    const dMoonMi  = Math.max(0, live.dMoonKm * KM_TO_MI);
+    const speedMph = live.speedKms * 3600 * KM_TO_MI;
+    return {
+      dEarth:   Math.round(dEarthMi),
+      dMoon:    Math.round(dMoonMi),
+      speed:    Math.round(speedMph),
+      speedKms: parseFloat(live.speedKms.toFixed(3)),
+      telemetryState: 'live',
+    };
+  }
+
+  // Fallback: interpolate TRAJ table
   if (now <= TRAJ[0][0]) return { dEarth: TRAJ[0][1], dMoon: TRAJ[0][2], speed: TRAJ[0][3], speedKms: TRAJ[0][4], telemetryState: 'traj' };
   if (now >= TRAJ[TRAJ.length-1][0]) return { dEarth: 0, dMoon: TRAJ[TRAJ.length-1][2], speed: 0, speedKms: 0, telemetryState: 'traj' };
   let lo = 0, hi = TRAJ.length - 1;
@@ -933,34 +1099,57 @@ function calcOrion() {
     dMoon:    Math.max(0, Math.round(m0 + (m1-m0)*f)),
     speed:    Math.round(s0 + (s1-s0)*f),
     speedKms: parseFloat((k0 + (k1-k0)*f).toFixed(3)),
-    telemetryState: 'traj'
+    telemetryState: 'traj',
   };
 }
 
-// Stubs — trajectory replaces live fetch
-const cachedTelemetry = null;
-let liveTelemetry = null;
-const FLYBY_EARTH_MOON_MI = 251639;
-const FLYBY_EARTH_MOON_KM = Math.round(FLYBY_EARTH_MOON_MI / KM_TO_MI);
+function getTelemetryState() {
+  return liveTable.length > 0 ? 'live' : 'traj';
+}
 
-function getTelemetryState() { return 'traj'; }
 function getMoonProgressPct(dEarth, dMoon) {
   const t = dEarth + dMoon;
   return t > 0 ? Math.max(0, Math.min(100, Math.round(dEarth / t * 100))) : 0;
 }
 
+// ===== REFRESH LIVE TELEMETRY =====
 async function refreshLiveTelemetry() {
   const badge = document.getElementById('telemetry-source');
   if (badge) {
-    badge.textContent = '● JPL Horizons trajectory · interpolated every second';
-    badge.style.color = 'var(--accent2)';
-    badge.classList.remove('badge-loading');
+    badge.textContent = '◌ Fetching JPL Horizons…';
+    badge.style.color = 'var(--muted)';
   }
+
+  try {
+    await fetchJPL();
+    liveFetchOk = true;
+    liveLastFetch = Date.now();
+    if (badge) {
+      badge.textContent = '● JPL Horizons live · updated ' + new Date().toUTCString().slice(17,22) + ' UTC';
+      badge.style.color = 'var(--accent2)';
+    }
+  } catch(err) {
+    console.warn('JPL fetch failed:', err.message);
+    liveFetchOk = false;
+    if (badge) {
+      badge.textContent = liveTable.length > 0
+        ? '● JPL Horizons (cached) · retrying…'
+        : '◌ JPL unavailable · using trajectory estimate';
+      badge.style.color = liveTable.length > 0 ? 'var(--gold)' : 'var(--muted)';
+    }
+  }
+
   const moonLabel = document.getElementById('s-moon-label');
   if (moonLabel) {
-    moonLabel.textContent = Date.now() < new Date('2026-04-06T17:00:00Z').getTime() ? 'To Moon' : 'From Moon';
+    const closestApproach = calcOrion();
+    moonLabel.textContent = closestApproach.dMoon < 20000 && Date.now() > new Date('2026-04-06T14:00:00Z').getTime()
+      ? (Date.now() > new Date('2026-04-06T17:00:00Z').getTime() ? 'From Moon' : 'To Moon')
+      : (Date.now() < new Date('2026-04-06T17:00:00Z').getTime() ? 'To Moon' : 'From Moon');
   }
 }
+
+// Load from session cache on startup (avoids redundant fetch on page reload)
+loadSessionCache();
 
 
 function updateBanner() {
@@ -1160,6 +1349,7 @@ async function manualRefresh() {
 
 // Kick off live telemetry — fetch immediately, then every 2 minutes
 refreshLiveTelemetry();
+setInterval(refreshLiveTelemetry, 2 * 60 * 1000);
 
 updateClock();
 drawTrajectory();
